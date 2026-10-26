@@ -161,5 +161,7 @@ RLS script results on this project, using existing profiles. Probe rows were del
 | Role ADMIN can update and delete a draft template | pass | delete=1 |
 | main_admin label can manage templates | pass | can_manage=true |
 | Ordinary role USER cannot insert a template | pass | insert denied |
-| Student who has interview.access | pending | no allowed_interview members exist |
-| Mentor who also has interview.access | pending | no mentor members exist |
+| Student who has interview.access | pass | rolled-back membership: `has_permission('interview.access')` true, `is_admin()` false, `can_manage_interview_templates()` false, insert denied |
+| Mentor who also has interview.access | pass | rolled-back membership: `is_admin()` true, `interview.access` true, `can_manage_interview_templates()` false, insert denied |
+
+The two label checks used existing role `USER` profiles. Membership rows were inserted only inside the test transaction. The statement ended with an exception so PostgreSQL rolled it back. A follow-up read showed `allowed_interview` members 0, mentor members 0, probe templates 0, and only the two published seed templates.

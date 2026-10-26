@@ -82,7 +82,7 @@ Not updated. Earlier read-only checks found no `interview_%` tables and no `2026
 3. Both seed templates published: present on the linked project.
 4. RLS enabled and policies verified: present on the linked project.
 5. Cross-student protections: passed on the linked project.
-6. Authorized staff template management: ADMIN and main_admin passed on the linked project. A role USER insert was denied. No `allowed_interview` or mentor members exist, so those two identities were not tested.
+6. Authorized staff template management: ADMIN and main_admin passed. A role USER insert was denied. Rolled-back `allowed_interview` and mentor-plus-interview memberships were also denied template management. No memberships remain.
 7. Evidence file: this report. Commit status is recorded with the Git result.
 
 ## Linked project, 2026-10-26
@@ -105,7 +105,9 @@ Live RLS results:
 | ADMIN draft update and delete | pass |
 | main_admin label management | pass, can_manage=true |
 | Ordinary USER template insert | pass, insert denied |
-| User who already has interview.access | pending, 0 members on allowed_interview |
-| Mentor who also has interview.access | pending, 0 mentor members |
+| Temporary allowed_interview membership | pass, access true, is_admin false, manage false, insert denied |
+| Temporary mentor plus allowed_interview membership | pass, access true, is_admin true, manage false, insert denied |
+
+Those two memberships were not saved. The test transaction raised after recording the results, which rolled the memberships and probe templates back. A later read still showed 0 `allowed_interview` members, 0 mentor members, and only `hr-behavioral` and `sde-technical`.
 
 Probe sessions and probe templates were removed. Remaining templates are only `hr-behavioral` and `sde-technical`, both published.
