@@ -731,3 +731,29 @@ export interface ExamResultDetail {
   result: ExamResultRow;
   questions: ExamResultQuestionReview[];
 }
+
+// ─── INTERVIEW ───────────────────────────────────────────────────────────────
+
+export type InterviewTemplateKind = 'hr' | 'technical' | 'domain';
+
+export type InterviewSessionStatus = 'in_progress' | 'completed' | 'failed';
+
+/** Published interview template shown in the student catalog. */
+export interface InterviewTemplate {
+  id: string;
+  slug: string;
+  title: string;
+  kind: InterviewTemplateKind;
+  durationMinutes: number;
+  createdAt: string;
+}
+
+/** Session row created when a student starts a template. */
+export interface InterviewSessionSummary {
+  id: string;
+  status: InterviewSessionStatus;
+  templateId: string;
+  templateTitle: string;
+  templateKind: InterviewTemplateKind;
+  promptVersion: string;
+}

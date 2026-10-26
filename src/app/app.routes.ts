@@ -91,7 +91,17 @@ export const routes: Routes = [
     path: 'interview',
     canActivate: [authGuard, blockExamOnlyGuard, featurePermissionGuard],
     data: { permission: 'interview.access' },
-    loadComponent: () => import('./interview/interview').then(m => m.Interview)
+    children: [
+      {
+        path: '',
+        loadComponent: () => import('./interview/interview').then(m => m.Interview)
+      },
+      {
+        path: 'session/:id',
+        loadComponent: () =>
+          import('./interview/interview-session').then(m => m.InterviewSession)
+      }
+    ]
   },
 
   // ─── Exam portal (isolated) ───────────────────────────────────────────────
