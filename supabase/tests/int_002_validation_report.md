@@ -77,14 +77,35 @@ Not updated. Earlier read-only checks found no `interview_%` tables and no `2026
 
 ## Done When
 
-1. Migration applied to the approved development database: BLOCKED. Local apply passed.
-2. Four tables, constraints, foreign keys, and indexes: local pass. Not present on `yllfccuxohnipleyseup`, so the shared database check is BLOCKED.
-3. Both seed templates published: local pass. Shared database BLOCKED.
-4. RLS enabled and verified: local pass. Shared database BLOCKED.
-5. Cross-student protections: local pass. Shared database BLOCKED.
-6. Authorized staff template management: local pass. `interview.access` does not grant it. Shared database BLOCKED.
+1. Migration applied to the linked project `yllfccuxohnipleyseup`: applied on 2026-10-26. Not recorded in `supabase_migrations.schema_migrations`.
+2. Four tables, constraints, foreign keys, and indexes: present on the linked project.
+3. Both seed templates published: present on the linked project.
+4. RLS enabled and policies verified: present on the linked project.
+5. Cross-student protections: passed on the linked project.
+6. Authorized staff template management: ADMIN and main_admin passed on the linked project. A role USER insert was denied. No `allowed_interview` or mentor members exist, so those two identities were not tested.
 7. Evidence file: this report. Commit status is recorded with the Git result.
 
-## Blocker
+## Linked project, 2026-10-26
 
-Confirm in writing that `yllfccuxohnipleyseup` is the intended database for this schema change, or connect a separate development project or branch and approve any branch cost. Then apply `supabase/migrations/20261024_interview_core.sql` and run `supabase/tests/int_002_interview_rls.sql` there.
+Madhu confirmed there is no separate development database and directed the schema onto the linked project. `npx supabase db query --linked --project-ref yllfccuxohnipleyseup` failed with `AccessTokenRequiredError` because the CLI has no access token. The migration statements were executed on `yllfccuxohnipleyseup` through the connected Supabase session. `db push` was not used.
+
+The database catalog then showed four RLS-enabled interview tables, the expected foreign keys, checks, and indexes, and both seed templates `published` with the required prompts. `supabase_migrations.schema_migrations` does not contain `20261024_interview_core`.
+
+Live RLS results:
+
+| Check | Result |
+|---|---|
+| Published templates visible to a student | pass, visible=2 |
+| Draft template hidden | pass, visible drafts=0 |
+| Cross-student session read, update, and delete | pass |
+| Cross-student turn insert, read, update, and delete | pass |
+| Cross-student score insert and read | pass, permission denied on insert |
+| Ownership and overall_score changes | pass, rejected |
+| Student score insert | pass, permission denied |
+| ADMIN draft update and delete | pass |
+| main_admin label management | pass, can_manage=true |
+| Ordinary USER template insert | pass, insert denied |
+| User who already has interview.access | pending, 0 members on allowed_interview |
+| Mentor who also has interview.access | pending, 0 mentor members |
+
+Probe sessions and probe templates were removed. Remaining templates are only `hr-behavioral` and `sde-technical`, both published.

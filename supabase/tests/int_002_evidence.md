@@ -125,9 +125,41 @@ These identities were fixtures inside the disposable database (`int002-student-a
 | Authorized staff can manage templates under the existing model | LOCAL PASS. `interview.access` alone does not grant management. |
 | Evidence committed or attached | Recorded in this file. Commit status is reported with the Git result. |
 
-## Remaining blocker
+## Linked project, 2026-10-26
 
-Apply and re-run `supabase/tests/int_002_interview_rls.sql` only after one of these is true:
+Madhu approved applying the schema to the linked project and said there is no separate development database. `supabase db query --linked` was attempted and failed before any SQL ran:
 
-- explicit approval to change the shared project `yllfccuxohnipleyseup`, or
-- a separate development project or Supabase branch is connected, including approval for any branch compute cost.
+`AccessTokenRequiredError: Access token not provided.`
+
+The same statements in `supabase/migrations/20261024_interview_core.sql` were then executed on project `yllfccuxohnipleyseup` through the connected Supabase session. `supabase db push` was not used. `supabase_migrations.schema_migrations` has no `20261024` row, because this path does not record CLI migration history. The objects below were read back from the database.
+
+Catalog:
+
+- RLS enabled on `interview_templates`, `interview_sessions`, `interview_turns`, and `interview_scores`.
+- Foreign keys: sessions `user_id` to `auth.users` on delete cascade, sessions `template_id` to templates on delete restrict, turns and scores `session_id` to sessions on delete cascade.
+- Checks include kind, status, duration, rubric object, session end order, score 0-100, turn role, and `seq > 0`.
+- Indexes include `idx_interview_sessions_user_started`, `idx_interview_sessions_template`, `idx_interview_turns_session_seq`, `interview_turns_session_seq_unique`, `idx_interview_scores_session`, and `interview_scores_session_competency_version_unique`.
+- Seeds: `hr-behavioral` published, 20 minutes, required prompt matched. `sde-technical` published, 30 minutes, required prompt matched. No other template rows remained after the test.
+
+RLS script results on this project, using existing profiles. Probe rows were deleted. `allowed_interview` members: 0. Mentor members: 0.
+
+| Check | Result | Detail |
+|---|---|---|
+| Published templates readable | pass | visible=2 |
+| Draft hidden from student | pass | visible drafts=0 |
+| Student B cannot read Student A's session | pass | visible=0 |
+| Student B cannot update or delete that session | pass | delete=0 |
+| Student B cannot insert a turn | pass | row-level security violation |
+| Student B cannot insert a score | pass | permission denied for interview_scores |
+| Student B cannot read, update, or delete the turn | pass | delete=0 |
+| Ownership change blocked | pass | interview session ownership cannot be changed |
+| Student cannot write overall_score | pass | overall_score is written by the evaluator |
+| Student cannot insert own score | pass | permission denied |
+| Evaluator can write a score | pass | |
+| Student A can read own score | pass | visible=1 |
+| Student B cannot read that score | pass | visible=0 |
+| Role ADMIN can update and delete a draft template | pass | delete=1 |
+| main_admin label can manage templates | pass | can_manage=true |
+| Ordinary role USER cannot insert a template | pass | insert denied |
+| Student who has interview.access | pending | no allowed_interview members exist |
+| Mentor who also has interview.access | pending | no mentor members exist |
