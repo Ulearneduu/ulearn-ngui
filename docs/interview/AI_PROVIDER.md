@@ -3,7 +3,26 @@
 **Task ID:** `INT-001`
 **Deliverable:** Provider selection, security, cost, safety, and retry policy for the AI Mock Interview feature (documentation only; no implementation in this task).
 
-> **Pending product-owner approval:** The **recommended primary provider/model** and all **cost figures** below are engineering recommendations based on official public pricing and labeled assumptions. They are **not** approved for production spend until the product owner signs off.
+## v1 configuration (INT-005)
+
+| Item | Value |
+| --- | --- |
+| Provider | OpenAI only |
+| Model ID | `gpt-6-luna` |
+| Endpoint | `POST https://api.openai.com/v1/chat/completions` |
+| Key secret | `OPENAI_API_KEY` |
+| Model secret | `INTERVIEW_AI_MODEL=gpt-6-luna` |
+| Provider secret | `INTERVIEW_AI_PROVIDER=openai` (optional; `google` is rejected) |
+
+Madhu confirmed OpenAI for v1 and that any suitable OpenAI model is acceptable. The selected model id is `gpt-6-luna`. The official model page lists Chat Completions as supported for that id ([GPT-6 Luna](https://developers.openai.com/api/docs/models/gpt-6-luna)). The function sends `model`, `messages`, `reasoning_effort: "low"`, and `max_completion_tokens`. It does not send `temperature`. OpenAI's GPT-6 guide says sampling parameters are unsupported unless reasoning effort is `none`, and Luna's default effort is `medium` ([Using GPT-6](https://developers.openai.com/api/docs/guides/latest-model)). `max_completion_tokens` is 2048 because that cap includes reasoning tokens.
+
+The browser never calls OpenAI. `interview-turn` reads the key only with `Deno.env.get('OPENAI_API_KEY')`. If `INTERVIEW_AI_MODEL` is unset, the function uses `gpt-6-luna`. Do not configure Gemini. Do not put the key in Angular, `environment.ts`, Git, or any client bundle. `supabase/functions/env.example` lists the model id and leaves the key empty.
+
+```bash
+supabase secrets set OPENAI_API_KEY=... INTERVIEW_AI_PROVIDER=openai INTERVIEW_AI_MODEL=gpt-6-luna
+```
+
+Apply `supabase/migrations/20261027_interview_turn_security.sql` before deploying `interview-turn`. Keep JWT verification on. The sections below are the earlier research record. They are not the v1 configuration.
 
 **Document version:** 2026-10-24 (verification pass)
 **Official pages re-checked:** 2026-10-24 (UTC) — [Gemini 3.5 Flash-Lite model](https://ai.google.dev/gemini-api/docs/models/gemini-3.5-flash-lite), [Gemini pricing](https://ai.google.dev/gemini-api/docs/pricing), [OpenAI gpt-5.6-terra](https://platform.openai.com/docs/models/gpt-5.6-terra), [MSEI RBI reference archive](https://www.msei.in/markets/currency/historical-data/rbireferenceratearchives).
@@ -21,9 +40,9 @@
 
 | Item | Recommendation |
 |------|----------------|
-| **Primary provider** | [Google Gemini API](https://ai.google.dev/gemini-api/docs) (Google AI for Developers) |
-| **Primary model ID** | `gemini-3.5-flash-lite` |
-| **Migration alternative** | [OpenAI API](https://platform.openai.com/docs) — model `gpt-5.6-terra` |
+| **v1 provider** | OpenAI only. See the v1 decision above. The rows below are the earlier research record. |
+| **v1 model ID** | `gpt-6-luna` on `POST /v1/chat/completions` |
+| **Earlier research alternative** | [OpenAI API](https://platform.openai.com/docs) — model `gpt-5.6-terra` was compared, not approved |
 | **Request path** | Angular → Supabase Auth (JWT) → Edge Function → provider HTTP API |
 | **Streaming (v1)** | **Non-streaming** responses for the first chat loop (simpler idempotency); both primary and alternative models **support** streaming when the UI adopts it (see §1.5). |
 
@@ -133,10 +152,9 @@ Source: [Gemini 3.5 Flash-Lite model page](https://ai.google.dev/gemini-api/docs
 
 | Secret | Required | Purpose |
 |--------|----------|---------|
-| `INTERVIEW_AI_PROVIDER` | Yes | `google` (primary) or `openai` (alternative path) |
-| `GEMINI_API_KEY` | If `google` | Gemini API key ([API key doc](https://ai.google.dev/gemini-api/docs/api-key)) |
-| `OPENAI_API_KEY` | If `openai` | OpenAI API key |
-| `INTERVIEW_AI_MODEL` | Yes | e.g. `gemini-3.5-flash-lite` or `gpt-5.6-terra` |
+| `INTERVIEW_AI_PROVIDER` | No | v1 accepts only `openai` or an empty value. `google` is rejected. |
+| `OPENAI_API_KEY` | Yes | OpenAI API key. Supabase Function Secret only. |
+| `INTERVIEW_AI_MODEL` | No | `gpt-6-luna`. The function uses that id when this secret is empty. |
 | `INTERVIEW_AI_TIMEOUT_MS` | No | HTTP timeout (default **45000** — proposed, **requires testing**) |
 | `INTERVIEW_AI_MAX_RETRIES` | No | Max retries after first attempt (default **2** — proposed) |
 | `INTERVIEW_AI_RETRY_BASE_MS` | No | Base delay for backoff (default **1000** — proposed) |
@@ -147,9 +165,9 @@ Secret names must **not** use the `SUPABASE_` prefix (reserved by Supabase) ([se
 ### 2.3 Configuration steps (production)
 
 1. Open **Supabase Dashboard → Edge Functions → Secrets** (or `supabase secrets set --env-file .env` with a **gitignored** file) ([secrets guide](https://supabase.com/docs/guides/functions/secrets)).
-2. Set `INTERVIEW_AI_PROVIDER=google`, `INTERVIEW_AI_MODEL=gemini-3.5-flash-lite`, and `GEMINI_API_KEY` (value only in Dashboard/CLI).
+2. Set `INTERVIEW_AI_PROVIDER=openai`, `OPENAI_API_KEY`, and `INTERVIEW_AI_MODEL=gpt-6-luna`. Do not set a Gemini key.
 3. Set timeout/retry secrets if non-default.
-4. Confirm function reads secrets via `Deno.env.get('GEMINI_API_KEY')` — **implementation not in scope for INT-001**.
+4. The function reads `Deno.env.get('OPENAI_API_KEY')` and `Deno.env.get('INTERVIEW_AI_MODEL')`.
 5. Use a **separate** Supabase project or secret set for staging vs production.
 
 ### 2.4 Local development
