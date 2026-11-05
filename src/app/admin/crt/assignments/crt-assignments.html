@@ -1,0 +1,138 @@
+<app-crt-shell crumb="Batch Assignments">
+  <div class="page-head">
+    <h1>Assign Path to Batch</h1>
+  </div>
+
+  @if (isLoading()) {
+    <p class="state" role="status">Loading assignments…</p>
+  } @else {
+    <div class="toolbar">
+      <label class="search">
+        <span class="visually-hidden">Search assignments</span>
+        <input type="search" placeholder="Search…" [value]="query()" (input)="onSearch($event)" />
+      </label>
+      <div class="filters" role="group" aria-label="Assignment status">
+        @for (option of filters; track option.id) {
+          <button
+            type="button"
+            class="filter-btn"
+            [class.active]="statusFilter() === option.id"
+            (click)="setFilter(option.id)"
+          >
+            {{ option.label }}
+          </button>
+        }
+      </div>
+      <button type="button" class="btn-add" (click)="openCreate()">+ New Assignment</button>
+    </div>
+
+    @if (store.assignments().length === 0) {
+      <div class="empty">
+        <p>No batch assignments yet.</p>
+        <button type="button" class="btn-text" (click)="openCreate()">Assign a path</button>
+      </div>
+    } @else if (visibleAssignments().length === 0) {
+      <p class="empty">No assignments match your search.</p>
+    } @else {
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Batch name</th>
+              <th>Learning path</th>
+              <th>Assigned date</th>
+              <th>Status</th>
+              <th>Due date</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (assignment of visibleAssignments(); track assignment.id) {
+              <tr>
+                <td><strong>{{ store.batchName(assignment.batchId) }}</strong></td>
+                <td>{{ store.pathTitle(assignment.pathId) }}</td>
+                <td>{{ formatDate(assignment.assignedDate) }}</td>
+                <td><span class="status-pill" [attr.data-tone]="assignment.status">{{ assignment.status }}</span></td>
+                <td>{{ formatDate(assignment.dueDate) }}</td>
+                <td>
+                  <div class="row-actions">
+                    <button type="button" (click)="openEdit(assignment.id)">Edit</button>
+                    <span aria-hidden="true">|</span>
+                    <button type="button" (click)="openView(assignment.id)">View</button>
+                    <span aria-hidden="true">|</span>
+                    <button type="button" class="danger" (click)="unassign(assignment)">Unassign</button>
+                  </div>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+
+    @if (viewing(); as assignment) {
+      <div class="detail-panel" role="region" aria-label="Assignment details">
+        <h2>Assignment details</h2>
+        <dl class="detail-list">
+          <div><dt>Batch</dt><dd>{{ store.batchName(assignment.batchId) }}</dd></div>
+          <div><dt>Learning path</dt><dd>{{ store.pathTitle(assignment.pathId) }}</dd></div>
+          <div><dt>Assigned date</dt><dd>{{ formatDate(assignment.assignedDate) }}</dd></div>
+          <div><dt>Due date</dt><dd>{{ formatDate(assignment.dueDate) }}</dd></div>
+          <div><dt>Status</dt><dd class="status-pill" [attr.data-tone]="assignment.status">{{ assignment.status }}</dd></div>
+        </dl>
+        <div class="detail-actions">
+          <button type="button" class="btn-text" (click)="closeView()">Close</button>
+          <button type="button" class="btn-text" (click)="openEdit(assignment.id)">Edit</button>
+        </div>
+      </div>
+    }
+
+    @if (showForm()) {
+      <form class="form-panel" #formHost [formGroup]="form" (ngSubmit)="save()">
+        <h2>{{ editingId() ? 'Edit Batch Assignment' : 'New Batch Assignment' }}</h2>
+        <div class="form-group">
+          <label for="assignment-path">Learning path *</label>
+          <select id="assignment-path" class="form-select" formControlName="pathId">
+            <option value="">Select a published learning path</option>
+            @for (path of pathChoices(); track path.id) {
+              <option [value]="path.id">{{ path.title }}</option>
+            }
+          </select>
+          @if (form.controls.pathId.invalid && form.controls.pathId.touched) {
+            <span class="field-error" role="alert">Select a learning path.</span>
+          }
+        </div>
+        <div class="form-group">
+          <label for="assignment-batch">Batch *</label>
+          <select id="assignment-batch" class="form-select" formControlName="batchId">
+            <option value="">Select a batch</option>
+            @for (batch of store.batches(); track batch.id) {
+              <option [value]="batch.id">{{ batch.name }}</option>
+            }
+          </select>
+          @if (form.controls.batchId.invalid && form.controls.batchId.touched) {
+            <span class="field-error" role="alert">Select a batch.</span>
+          }
+        </div>
+        <div class="form-group">
+          <label for="assignment-due">Due date *</label>
+          <input id="assignment-due" class="form-input" type="date" formControlName="dueDate" />
+          @if (form.controls.dueDate.invalid && form.controls.dueDate.touched) {
+            <span class="field-error" role="alert">Choose a due date.</span>
+          }
+        </div>
+        <div class="form-group">
+          <label for="assignment-status">Status *</label>
+          <select id="assignment-status" class="form-select" formControlName="status">
+            <option value="active">Active</option>
+            <option value="draft">Draft</option>
+          </select>
+        </div>
+        <div class="form-actions">
+          <button type="button" class="btn-text" (click)="closeForm()">Cancel</button>
+          <button type="submit" class="btn-text">Assign Path</button>
+        </div>
+      </form>
+    }
+  }
+</app-crt-shell>

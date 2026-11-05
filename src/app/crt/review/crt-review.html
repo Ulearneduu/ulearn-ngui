@@ -1,0 +1,33 @@
+<section class="crt-review">
+  <header class="page-header">
+    <a routerLink="/crt/history">Back to Attempt History</a>
+    <h1>Review</h1>
+  </header>
+
+  @if (loading()) {
+    <p class="status" role="status">Loading review...</p>
+  } @else if (loadError()) {
+    <div class="banner" role="alert">
+      <p>{{ loadError() }}</p>
+      <button type="button" class="btn-primary" (click)="load()">Try again</button>
+    </div>
+  } @else if (reviews().length === 0) {
+    <p class="status">
+      This submitted attempt has no saved answers to review. Questions left unanswered are not included.
+    </p>
+  } @else {
+    <p class="note">Questions without a saved answer are not included in this review.</p>
+    <ol class="review-list">
+      @for (review of reviews(); track review.question_id; let index = $index) {
+        <li class="review-card">
+          <h2>Question {{ index + 1 }}</h2>
+          <p class="stem">{{ review.stem }}</p>
+          <p>Your answer: {{ selectedAnswer(review) }}</p>
+          <p>Correct answer: {{ correctAnswer(review) }}</p>
+          <p>Result: {{ correctness(review) }}</p>
+          <p>Explanation: {{ review.explanation || 'No explanation was provided.' }}</p>
+        </li>
+      }
+    </ol>
+  }
+</section>

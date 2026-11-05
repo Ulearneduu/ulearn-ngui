@@ -1,0 +1,171 @@
+
+<app-crt-shell crumb="Modules">
+  @if (isLoading()) {
+    <p class="state" role="status">Loading modules…</p>
+  } @else if (!path()) {
+    <p class="state error" role="alert">
+      This learning path was not found.
+    </p>
+    <a class="title-link" routerLink="/admin/crt/paths">
+      Back to learning paths
+    </a>
+  } @else {
+    <div class="page-head">
+      <h1>Modules for {{ path()?.title }}</h1>
+    </div>
+
+    <div class="toolbar">
+      <label class="search">
+        <span class="visually-hidden">Search modules</span>
+        <input
+          type="search"
+          placeholder="Search…"
+          [value]="query()"
+          (input)="onSearch($event)"
+        />
+      </label>
+
+      <button type="button" class="btn-add" (click)="openCreate()">
+        + Add Module
+      </button>
+    </div>
+
+    @if (pathModules().length === 0) {
+      <div class="empty">
+        <p>No modules on this path yet.</p>
+        <button type="button" class="btn-text" (click)="openCreate()">
+          Add the first module
+        </button>
+      </div>
+    } @else if (visibleModules().length === 0) {
+      <p class="empty">No modules match your search.</p>
+    } @else {
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Order</th>
+              <th>Module title</th>
+              <th>Questions</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            @for (module of visibleModules(); track module.id) {
+              <tr>
+                <td>{{ module.sort_order + 1 }}</td>
+
+                <td>
+                  <strong>{{ module.title }}</strong>
+                </td>
+
+                <td>
+                  <a
+                    class="title-link"
+                    [routerLink]="['/admin/crt/questions']"
+                    [queryParams]="{ moduleId: module.id }"
+                  >
+                    Open questions
+                  </a>
+                </td>
+
+                <td>
+                  <div class="row-actions">
+                    <button type="button" (click)="openEdit(module.id)">
+                      Edit
+                    </button>
+                    <span aria-hidden="true">|</span>
+                    <button
+                      type="button"
+                      [disabled]="isFirst(module.id)"
+                      (click)="move(module.id, -1)"
+                    >
+                      Move Up
+                    </button>
+                    <span aria-hidden="true">|</span>
+                    <button
+                      type="button"
+                      [disabled]="isLast(module.id)"
+                      (click)="move(module.id, 1)"
+                    >
+                      Move Down
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+
+    @if (showForm()) {
+      <form
+        class="form-panel"
+        #formHost
+        [formGroup]="form"
+        (ngSubmit)="save()"
+      >
+        <h2>{{ editingId() ? 'Edit Module' : 'Add Module' }}</h2>
+
+        <div class="form-group">
+          <label for="module-title">Module title *</label>
+          <input
+            id="module-title"
+            class="form-input"
+            type="text"
+            formControlName="title"
+            placeholder="Enter module title"
+          />
+
+          @if (form.controls.title.invalid && form.controls.title.touched) {
+            <span class="field-error" role="alert">
+              Enter a module title of at least 2 characters.
+            </span>
+          }
+        </div>
+
+        <div class="form-group">
+          <label for="module-order">Display order *</label>
+          <input
+            id="module-order"
+            class="form-input"
+            type="number"
+            min="1"
+            step="1"
+            formControlName="displayOrder"
+          />
+
+          @if (
+            form.controls.displayOrder.invalid &&
+            form.controls.displayOrder.touched
+          ) {
+            <span class="field-error" role="alert">
+              Enter a valid display order.
+            </span>
+          }
+        </div>
+
+        <div class="form-actions">
+          <button
+            type="button"
+            class="btn-text"
+            (click)="closeForm()"
+            [disabled]="isSaving()"
+          >
+            Cancel
+          </button>
+
+          <button
+            type="submit"
+            class="btn-text"
+            [disabled]="isSaving()"
+          >
+            {{ isSaving() ? 'Saving…' : 'Save Module' }}
+          </button>
+        </div>
+      </form>
+    }
+  }
+</app-crt-shell>

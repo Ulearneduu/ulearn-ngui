@@ -1,0 +1,32 @@
+<section class="crt-history">
+  <header class="page-header">
+    <a routerLink="/crt">Back to CRT Home</a>
+    <h1>Attempt History</h1>
+    <p>Your practice attempts, newest first.</p>
+  </header>
+
+  @if (loading()) {
+    <p class="status" role="status">Loading attempts...</p>
+  } @else if (loadError()) {
+    <div class="banner" role="alert">
+      <p>{{ loadError() }}</p>
+      <button type="button" class="btn-primary" (click)="load()">Try again</button>
+    </div>
+  } @else if (attempts().length === 0) {
+    <p class="status">You have not started a practice attempt yet.</p>
+  } @else {
+    <ul class="attempt-list">
+      @for (attempt of attempts(); track attempt.id) {
+        <li class="attempt-card">
+          <p class="status-line">{{ statusLabel(attempt.status) }}</p>
+          <p>Date: {{ formatDate(attempt.started_at) }}</p>
+          <p>Score: {{ scoreLabel(attempt) }}</p>
+          <p>Duration: {{ durationLabel(attempt) }}</p>
+          @if (attempt.status === 'submitted') {
+            <a class="btn-primary" [routerLink]="['/crt/history', attempt.id, 'review']">Review</a>
+          }
+        </li>
+      }
+    </ul>
+  }
+</section>

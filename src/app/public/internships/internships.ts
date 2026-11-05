@@ -8,8 +8,9 @@ import { Subject, takeUntil } from 'rxjs';
 import { InternshipService } from '../../shared/services/internship.service';
 import { InternshipApplicationService } from '../../shared/services/internship-application.service';
 import { AuthService } from '../../core/services/auth.service';
-import { ToastService } from '../../core/services/toast';
 import { Internship, InternshipType, InternshipMode } from '../../models';
+import { InternshipEnrollModal } from '../../shared/components/internship-enroll-modal/internship-enroll-modal';
+import { PaymentService } from '../../shared/services/payment.service';
 
 interface FilterState {
   types: InternshipType[];
@@ -23,7 +24,7 @@ interface FilterState {
   selector: 'app-internships',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CommonModule],
+  imports: [CommonModule, InternshipEnrollModal],
   templateUrl: './internships.html',
   styleUrl: './internships.scss'
 })
@@ -33,13 +34,15 @@ export class Internships implements OnInit, OnDestroy {
   private readonly internshipService  = inject(InternshipService);
   private readonly applicationService = inject(InternshipApplicationService);
   readonly auth                       = inject(AuthService);
-  private readonly toast              = inject(ToastService);
+  private readonly paymentService     = inject(PaymentService);
   private readonly destroy$           = new Subject<void>();
 
   readonly allInternships = signal<Internship[]>([]);
   readonly isLoading      = signal(true);
+  readonly loadError      = signal<string | null>(null);
   readonly appliedIds     = signal<Set<string>>(new Set());
-  readonly applyingId     = signal<string | null>(null);
+  readonly showEnrollModal  = signal(false);
+  readonly enrollTarget     = signal<Internship | null>(null);
 
   readonly filters = signal<FilterState>({
     types: [], modes: [], domains: [],
@@ -125,10 +128,12 @@ export class Internships implements OnInit, OnDestroy {
 
   // ── Lifecycle ─────────────────────────────────────────────────────────────
   ngOnInit(): void {
+    this.paymentService.unlockPageScroll();
     const applyAfterLogin = this.route.snapshot.queryParamMap.get('apply');
 
-    this.internshipService.getInternships().subscribe(data => {
-      this.allInternships.set(data);
+    this.internshipService.loadOpenInternships().subscribe((result) => {
+      this.allInternships.set(result.internships);
+      this.loadError.set(result.error);
       this.isLoading.set(false);
 
       if (this.auth.isLoggedIn()) {
@@ -168,9 +173,14 @@ export class Internships implements OnInit, OnDestroy {
         const validModes   = ['remote', 'hybrid', 'onsite'];
         const validDomains = ['Technical', 'Design', 'Marketing', 'AI/ML'];
 
-        const types   = typeParam   ? typeParam.split(',').filter(t => validTypes.includes(t))   as InternshipType[] : [];
+        let types   = typeParam   ? typeParam.split(',').filter(t => validTypes.includes(t))   as InternshipType[] : [];
         const modes   = modeParam   ? modeParam.split(',').filter(m => validModes.includes(m))   as InternshipMode[] : [];
         const domains = domainParam ? domainParam.split(',').filter(d => validDomains.includes(d)) : [];
+
+        const routeType = this.route.snapshot.paramMap.get('type');
+        if (types.length === 0 && routeType && validTypes.includes(routeType)) {
+          types = [routeType as InternshipType];
+        }
 
         this.filters.update(f => ({
           ...f,
@@ -269,11 +279,29 @@ export class Internships implements OnInit, OnDestroy {
   }
 
   clearAllFilters(): void {
+    const routeType = this.route.snapshot.paramMap.get('type');
+    const types =
+      routeType && ['short', 'long'].includes(routeType)
+        ? [routeType as InternshipType]
+        : [];
     this.filters.set({
-      types: [], modes: [], domains: [],
-      ppoOnly: false, searchQuery: '',
+      types,
+      modes: [],
+      domains: [],
+      ppoOnly: false,
+      searchQuery: '',
     });
     this.syncToUrl();
+  }
+
+  retryLoad(): void {
+    this.isLoading.set(true);
+    this.loadError.set(null);
+    this.internshipService.loadOpenInternships().subscribe((result) => {
+      this.allInternships.set(result.internships);
+      this.loadError.set(result.error);
+      this.isLoading.set(false);
+    });
   }
 
   toggleFilterPanel(): void { this.filterPanelOpen.update(v => !v); }
@@ -301,12 +329,12 @@ export class Internships implements OnInit, OnDestroy {
     return '₹' + amount.toLocaleString('en-IN') + '/mo';
   }
 
-  hasApplied(internshipId: string): boolean {
-    return this.appliedIds().has(internshipId);
+  formatEnrollmentFee(price: number): string {
+    return '₹' + price.toLocaleString('en-IN') + ' enrollment fee';
   }
 
-  isApplying(internshipId: string): boolean {
-    return this.applyingId() === internshipId;
+  hasApplied(internshipId: string): boolean {
+    return this.appliedIds().has(internshipId);
   }
 
   private async loadAppliedIds(userId: string, applyAfterLogin?: string | null): Promise<void> {
@@ -314,16 +342,20 @@ export class Internships implements OnInit, OnDestroy {
       next: (ids) => {
         this.appliedIds.set(ids);
         if (applyAfterLogin && !ids.has(applyAfterLogin)) {
-          void this.handleApplyClick(applyAfterLogin);
+          this.openEnrollModal(applyAfterLogin);
         }
       }
     });
   }
 
-  async handleApplyClick(internshipId: string): Promise<void> {
+  enrollReturnUrl(): string {
+    const type = this.route.snapshot.params['type'] ?? 'short';
+    return `/internships/${type}`;
+  }
+
+  openEnrollModal(internshipId: string): void {
     const intern = this.allInternships().find((i) => i.id === internshipId);
     if (!intern || intern.status === 'closed') return;
-
     if (this.hasApplied(internshipId)) return;
 
     if (!this.auth.isLoggedIn()) {
@@ -334,18 +366,20 @@ export class Internships implements OnInit, OnDestroy {
       return;
     }
 
-    const user = this.auth.currentUser();
-    if (!user) return;
+    this.enrollTarget.set(intern);
+    this.showEnrollModal.set(true);
+  }
 
-    this.applyingId.set(internshipId);
-    const ok = await this.applicationService.applyForInternship(internshipId, user.id);
-    this.applyingId.set(null);
+  closeEnrollModal(): void {
+    this.showEnrollModal.set(false);
+    this.enrollTarget.set(null);
+  }
 
-    if (ok) {
-      this.appliedIds.update((set) => new Set([...set, internshipId]));
-      this.toast.success('Application submitted!');
-    } else {
-      this.toast.error('Could not submit application. Please try again.');
-    }
+  onEnrolled(internshipId: string): void {
+    this.appliedIds.update((set) => new Set([...set, internshipId]));
+  }
+
+  handleEnrollClick(internshipId: string): void {
+    this.openEnrollModal(internshipId);
   }
 }

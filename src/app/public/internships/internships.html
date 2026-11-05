@@ -167,6 +167,13 @@
             </div>
           }
         </div>
+      } @else if (loadError()) {
+        <div class="error-state">
+          <div class="error-icon">⚠️</div>
+          <h3>Could not load internships</h3>
+          <p class="error-message">{{ loadError() }}</p>
+          <button type="button" class="btn-primary" (click)="retryLoad()">Try again</button>
+        </div>
       } @else if (filteredInternships().length === 0) {
         <div class="empty-state">
           <div class="empty-icon">🔍</div>
@@ -206,6 +213,9 @@
               <div class="card-meta">
                 <span>⏱ {{ intern.durationLabel }}</span>
                 <span>💰 {{ formatStipend(intern.stipendPerMonth) }}</span>
+                @if (intern.price > 0) {
+                  <span>{{ formatEnrollmentFee(intern.price) }}</span>
+                }
                 <span>📁 {{ intern.domain }}</span>
               </div>
 
@@ -220,19 +230,15 @@
                   {{ intern.status === 'open' ? 'Open' : 'Closed' }}
                 </span>
                 @if (hasApplied(intern.id)) {
-                  <button class="apply-btn applied" disabled>Applied</button>
+                  <button class="apply-btn applied" disabled>Enrolled</button>
                 } @else {
                   <button
                     class="apply-btn"
-                    [disabled]="intern.status === 'closed' || isApplying(intern.id)"
+                    [disabled]="intern.status === 'closed'"
                     [class.disabled]="intern.status === 'closed'"
-                    (click)="handleApplyClick(intern.id)"
+                    (click)="handleEnrollClick(intern.id)"
                   >
-                    @if (isApplying(intern.id)) {
-                      Applying…
-                    } @else {
-                      Apply Now
-                    }
+                    Enroll Now
                   </button>
                 }
               </div>
@@ -245,6 +251,15 @@
     </div>
   </div>
 </div>
+
+@if (showEnrollModal() && enrollTarget(); as target) {
+  <app-internship-enroll-modal
+    [internship]="target"
+    [returnUrl]="enrollReturnUrl()"
+    (closed)="closeEnrollModal()"
+    (enrolled)="onEnrolled(target.id)"
+  />
+}
 
 <!-- Mobile Filter Drawer -->
 @if (mobilePanelOpen()) {

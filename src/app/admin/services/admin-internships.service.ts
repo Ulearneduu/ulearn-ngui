@@ -11,6 +11,8 @@ export interface AdminInternshipRow {
   description: string;
   durationLabel: string;
   stipendPerMonth: number;
+  price: number;
+  originalPrice: number | null;
   hasPpo: boolean;
   skills: string[];
   thumbnailUrl: string | null;
@@ -27,6 +29,8 @@ export interface AdminInternshipInput {
   description: string;
   durationLabel: string;
   stipendPerMonth: number;
+  price: number;
+  originalPrice?: number;
   hasPpo: boolean;
   skills: string[];
   thumbnailUrl?: string;
@@ -36,7 +40,7 @@ export interface AdminInternshipInput {
 @Injectable({ providedIn: 'root' })
 export class AdminInternshipsService {
   private readonly fields =
-    'id, title, type, mode, domain, description, duration_label, stipend_per_month, has_ppo, skills, thumbnail_url, status, created_at, updated_at';
+    'id, title, type, mode, domain, description, duration_label, stipend_per_month, price, original_price, has_ppo, skills, thumbnail_url, status, created_at, updated_at';
 
   async listAll(): Promise<AdminInternshipRow[]> {
     const { data, error } = await supabase
@@ -101,6 +105,8 @@ export class AdminInternshipsService {
       description: input.description.trim(),
       duration_label: input.durationLabel.trim(),
       stipend_per_month: input.stipendPerMonth,
+      price: input.price,
+      original_price: input.originalPrice ?? null,
       has_ppo: input.hasPpo,
       skills: input.skills,
       thumbnail_url: input.thumbnailUrl?.trim() || null,
@@ -118,6 +124,8 @@ export class AdminInternshipsService {
       description: String(r['description'] ?? ''),
       durationLabel: String(r['duration_label'] ?? ''),
       stipendPerMonth: Number(r['stipend_per_month'] ?? 0),
+      price: Number(r['price'] ?? 0),
+      originalPrice: r['original_price'] != null ? Number(r['original_price']) : null,
       hasPpo: Boolean(r['has_ppo']),
       skills: Array.isArray(r['skills']) ? (r['skills'] as string[]) : [],
       thumbnailUrl: (r['thumbnail_url'] as string) ?? null,

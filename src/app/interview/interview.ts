@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } 
 import { Router } from '@angular/router';
 import { InterviewTemplate, InterviewTemplateKind } from '../models';
 import { InterviewCatalogService, interviewErrorMessage } from './interview-catalog.service';
+import { InterviewQuota, InterviewService } from './interview.service';
 
 interface CatalogGroup {
   kind: InterviewTemplateKind;
@@ -40,6 +41,24 @@ const KIND_ORDER: readonly InterviewTemplateKind[] = ['hr', 'technical', 'domain
         <p>Choose a published interview and start a new session.</p>
       </header>
 
+      @if (quotaLoading()) {
+        <p class="status" role="status">Loading your weekly quota…</p>
+      } @else if (quotaError()) {
+        <div class="banner error" role="alert">
+          <p>{{ quotaError() }}</p>
+          <button type="button" class="btn-outline" (click)="refreshQuota()">Try again</button>
+        </div>
+      } @else if (quota(); as currentQuota) {
+        <section class="quota-card" aria-label="Weekly interview quota">
+          <h2>This week</h2>
+          <p class="meta">{{ currentQuota.used }} / {{ currentQuota.weekly_limit }} attempts used. {{ currentQuota.remaining }} remaining.</p>
+          <p class="meta">Resets {{ formatReset(currentQuota.resets_at) }}.</p>
+          @if (currentQuota.remaining === 0) {
+            <p class="status">Weekly mock interview limit reached. Try again after the reset time shown above.</p>
+          }
+        </section>
+      }
+
       @if (loading()) {
         <p class="status" role="status">Loading interviews…</p>
       } @else if (loadError()) {
@@ -69,7 +88,7 @@ const KIND_ORDER: readonly InterviewTemplateKind[] = ['hr', 'technical', 'domain
                   <button
                     type="button"
                     class="btn-primary"
-                    [disabled]="startingId() !== null"
+                    [disabled]="startingId() !== null || quotaExhausted()"
                     (click)="start(template)"
                   >
                     {{ startingId() === template.id ? 'Starting…' : 'Start' }}
@@ -99,6 +118,22 @@ const KIND_ORDER: readonly InterviewTemplateKind[] = ['hr', 'technical', 'domain
     .meta {
       margin: 0;
       color: var(--muted);
+    }
+    .quota-card {
+      margin-top: 32px;
+      padding: 24px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--card);
+    }
+    .quota-card h2 {
+      margin: 0 0 8px;
+      color: var(--navy);
+      font-size: 1.125rem;
+    }
+    .quota-card .meta + .meta,
+    .quota-card .status {
+      margin-top: 8px;
     }
     .group {
       margin-top: 32px;
@@ -164,6 +199,7 @@ const KIND_ORDER: readonly InterviewTemplateKind[] = ['hr', 'technical', 'domain
 })
 export class Interview implements OnInit {
   private readonly catalog = inject(InterviewCatalogService);
+  private readonly quotaService = inject(InterviewService);
   private readonly router = inject(Router);
 
   readonly loading = signal(true);
@@ -171,6 +207,14 @@ export class Interview implements OnInit {
   readonly startError = signal<string | null>(null);
   readonly startingId = signal<string | null>(null);
   readonly templates = signal<InterviewTemplate[]>([]);
+  readonly quotaLoading = signal(true);
+  readonly quotaError = signal<string | null>(null);
+  readonly quota = signal<InterviewQuota | null>(null);
+
+  readonly quotaExhausted = computed(() => {
+    const current = this.quota();
+    return current !== null && current.remaining <= 0;
+  });
 
   readonly groups = computed<CatalogGroup[]>(() => {
     const templates = this.templates();
@@ -184,6 +228,7 @@ export class Interview implements OnInit {
 
   ngOnInit(): void {
     void this.load();
+    void this.refreshQuota();
   }
 
   async load(): Promise<void> {
@@ -199,8 +244,33 @@ export class Interview implements OnInit {
     }
   }
 
+  async refreshQuota(): Promise<void> {
+    this.quotaLoading.set(true);
+    this.quotaError.set(null);
+    const outcome = await this.quotaService.loadQuota();
+    this.quotaLoading.set(false);
+    if (!outcome.ok) {
+      this.quota.set(null);
+      this.quotaError.set(outcome.error);
+      return;
+    }
+    this.quota.set(outcome.quota);
+  }
+
+  formatReset(iso: string): string {
+    try {
+      return new Intl.DateTimeFormat(undefined, {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+        timeZone: 'Asia/Kolkata',
+      }).format(new Date(iso));
+    } catch {
+      return iso;
+    }
+  }
+
   async start(template: InterviewTemplate): Promise<void> {
-    if (this.startingId()) return;
+    if (this.startingId() || this.quotaExhausted()) return;
     this.startingId.set(template.id);
     this.startError.set(null);
     try {

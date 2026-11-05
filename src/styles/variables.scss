@@ -7,6 +7,7 @@
   --blue:    #5B9BD5;
   --red:     #E05C5C;
   --purple:  #8B6FBE;
+  --gradient: linear-gradient(135deg, #8B6FBE 0%, #6C4FD4 100%);
   --bg:      #F7F8FC;
   --card:    #FFFFFF;
   --text:    #3A3A4A;
@@ -23,6 +24,7 @@ $orange:  #F4845F;
 $blue:    #5B9BD5;
 $red:     #E05C5C;
 $purple:  #8B6FBE;
+$gradient: linear-gradient(135deg, $purple 0%, #6C4FD4 100%);
 $bg:      #F7F8FC;
 $card:    #FFFFFF;
 $text:    #3A3A4A;

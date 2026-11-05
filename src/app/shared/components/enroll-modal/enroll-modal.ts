@@ -196,6 +196,7 @@ export class EnrollModal implements OnInit {
 
     const course = this.course();
     const pending = {
+      kind: 'course' as const,
       courseId: course.id,
       slug: course.slug,
       price: this.finalPrice(),

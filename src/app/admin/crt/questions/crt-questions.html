@@ -1,0 +1,230 @@
+<app-crt-shell crumb="Questions">
+  <div class="page-head">
+    <h1>Question Bank</h1>
+  </div>
+
+  @if (isLoading()) {
+    <p class="state" role="status">Loading questions…</p>
+  } @else if (loadError()) {
+    <div class="state error" role="alert">
+      <p>{{ loadError() }}</p>
+      <button type="button" class="btn-text" (click)="loadQuestions()">Try again</button>
+    </div>
+  } @else {
+    <div class="toolbar">
+      <label class="search">
+        <span class="visually-hidden">Search questions</span>
+        <input type="search" placeholder="Search…" [value]="query()" (input)="onSearch($event)" />
+      </label>
+      <label class="search">
+        <span class="visually-hidden">Filter by module</span>
+        <select
+          class="form-select"
+          aria-label="Module"
+          [value]="moduleFilter()"
+          (change)="setModuleFilter($any($event.target).value)"
+        >
+          <option value="">All modules</option>
+          @for (module of moduleChoices(); track module.id) {
+            <option [value]="module.id">{{ module.label }}</option>
+          }
+        </select>
+      </label>
+      <label class="search">
+        <span class="visually-hidden">Filter by topic</span>
+        <input
+          type="search"
+          placeholder="Topic…"
+          aria-label="Topic"
+          [value]="topicFilter()"
+          (input)="setTopicFilter($any($event.target).value)"
+        />
+      </label>
+      <label class="search">
+        <span class="visually-hidden">Filter by difficulty</span>
+        <select
+          class="form-select"
+          aria-label="Difficulty"
+          [value]="difficultyFilter()"
+          (change)="setDifficultyFilter($any($event.target).value)"
+        >
+          <option value="all">All difficulties</option>
+          @for (level of difficulties; track level.id) {
+            <option [value]="level.id">{{ level.label }}</option>
+          }
+        </select>
+      </label>
+      <button type="button" class="btn-add" (click)="openCreate()">+ Add Question</button>
+    </div>
+
+    @if (moduleFilterError()) {
+      <div class="state error" role="alert">
+        <p>{{ moduleFilterError() }}</p>
+        <button type="button" class="btn-text" (click)="clearModuleFilter()">Show all questions</button>
+      </div>
+    } @else if (moduleFilterLabel()) {
+      <p class="filter-note">
+        Showing questions for {{ moduleFilterLabel() }}
+        <button type="button" class="btn-text" (click)="clearModuleFilter()">Clear</button>
+      </p>
+    }
+
+    @if (!moduleFilterError() && store.questions().length === 0) {
+      <div class="empty">
+        <p>No questions yet.</p>
+        <button type="button" class="btn-text" (click)="openCreate()">Add the first question</button>
+      </div>
+    } @else if (!moduleFilterError() && visibleQuestions().length === 0) {
+      <p class="empty">No questions match your search.</p>
+    } @else if (!moduleFilterError()) {
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Question</th>
+              <th>Module</th>
+              <th>Topic</th>
+              <th>Difficulty</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (question of visibleQuestions(); track question.id) {
+              <tr>
+                <td class="question-text">{{ question.text }}</td>
+                <td>{{ store.moduleTitle(question.moduleId) }}</td>
+                <td>{{ question.topic || '—' }}</td>
+                <td><span class="status-pill" [attr.data-tone]="question.difficulty">{{ question.difficulty || 'Not specified' }}</span></td>
+                <td>
+                  <div class="row-actions">
+                    <button type="button" (click)="openEdit(question.id)">Edit</button>
+                    <span aria-hidden="true">|</span>
+                    <button type="button" (click)="openPreview(question.id)">Preview</button>
+                    <span aria-hidden="true">|</span>
+                    <button type="button" class="danger" (click)="remove(question)">Delete</button>
+                  </div>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+
+    @if (preview(); as question) {
+      <div #previewHost class="detail-panel" role="region" aria-label="Question preview">
+        <h2>Question preview</h2>
+        <dl class="detail-list">
+          <div><dt>Question</dt><dd>{{ question.text }}</dd></div>
+          <div><dt>Module</dt><dd>{{ store.moduleTitle(question.moduleId) }}</dd></div>
+          <div><dt>Topic</dt><dd>{{ question.topic || '—' }}</dd></div>
+          <div><dt>Difficulty</dt><dd class="status-pill" [attr.data-tone]="question.difficulty">{{ question.difficulty || 'Not specified' }}</dd></div>
+          <div><dt>Option A</dt><dd [class.correct]="question.correct === 'A'">{{ question.optionA }}</dd></div>
+          <div><dt>Option B</dt><dd [class.correct]="question.correct === 'B'">{{ question.optionB }}</dd></div>
+          <div><dt>Option C</dt><dd [class.correct]="question.correct === 'C'">{{ question.optionC }}</dd></div>
+          <div><dt>Option D</dt><dd [class.correct]="question.correct === 'D'">{{ question.optionD }}</dd></div>
+          <div><dt>Correct answer</dt><dd class="correct">{{ question.correct }}</dd></div>
+          <div><dt>Explanation</dt><dd>{{ question.explanation || '—' }}</dd></div>
+        </dl>
+        <div class="detail-actions">
+          <button type="button" class="btn-text" (click)="closePreview()">Close</button>
+          <button type="button" class="btn-text" (click)="openEdit(question.id)">Edit</button>
+        </div>
+      </div>
+    }
+
+    @if (showForm()) {
+      <form class="form-panel" #formHost [formGroup]="form" (ngSubmit)="save()">
+        <h2>{{ editingId() ? 'Edit MCQ Question' : 'Add MCQ Question' }}</h2>
+        <div class="form-group">
+          <label for="question-module">Module *</label>
+          <select id="question-module" class="form-select" formControlName="moduleId">
+            <option value="">Select a module</option>
+            @for (module of moduleChoices(); track module.id) {
+              <option [value]="module.id">{{ module.label }}</option>
+            }
+          </select>
+          @if (form.controls.moduleId.invalid && form.controls.moduleId.touched) {
+            <span class="field-error" role="alert">Select a module.</span>
+          }
+        </div>
+        <div class="form-group">
+          <label for="question-text">Question text *</label>
+          <textarea id="question-text" class="form-textarea" rows="3" formControlName="text" placeholder="Enter your question"></textarea>
+          @if (form.controls.text.invalid && form.controls.text.touched) {
+            <span class="field-error" role="alert">Enter a question of at least 5 characters.</span>
+          }
+        </div>
+        <div class="form-group">
+          <label for="option-a">Option A *</label>
+          <input id="option-a" class="form-input" type="text" formControlName="optionA" placeholder="Enter option A" />
+          @if (form.controls.optionA.invalid && form.controls.optionA.touched) {
+            <span class="field-error" role="alert">Enter option A.</span>
+          }
+        </div>
+        <div class="form-group">
+          <label for="option-b">Option B *</label>
+          <input id="option-b" class="form-input" type="text" formControlName="optionB" placeholder="Enter option B" />
+          @if (form.controls.optionB.invalid && form.controls.optionB.touched) {
+            <span class="field-error" role="alert">Enter option B.</span>
+          }
+        </div>
+        <div class="form-group">
+          <label for="option-c">Option C *</label>
+          <input id="option-c" class="form-input" type="text" formControlName="optionC" placeholder="Enter option C" />
+          @if (form.controls.optionC.invalid && form.controls.optionC.touched) {
+            <span class="field-error" role="alert">Enter option C.</span>
+          }
+        </div>
+        <div class="form-group">
+          <label for="option-d">Option D *</label>
+          <input id="option-d" class="form-input" type="text" formControlName="optionD" placeholder="Enter option D" />
+          @if (form.controls.optionD.invalid && form.controls.optionD.touched) {
+            <span class="field-error" role="alert">Enter option D.</span>
+          }
+        </div>
+        <div class="form-group">
+          <label for="correct-answer">Correct answer *</label>
+          <select id="correct-answer" class="form-select" formControlName="correct">
+            <option value="">Select A / B / C / D</option>
+            @for (answer of answers; track answer) {
+              <option [value]="answer">{{ answer }}</option>
+            }
+          </select>
+          @if (form.controls.correct.invalid && form.controls.correct.touched) {
+            <span class="field-error" role="alert">Select the correct answer.</span>
+          }
+        </div>
+        <div class="form-group">
+          <label for="question-topic">Topic *</label>
+          <input id="question-topic" class="form-input" type="text" formControlName="topic" placeholder="Enter a topic" />
+          @if (form.controls.topic.invalid && form.controls.topic.touched) {
+            <span class="field-error" role="alert">Enter a topic.</span>
+          }
+        </div>
+        <div class="form-group">
+          <label for="question-difficulty">Difficulty *</label>
+          <select id="question-difficulty" class="form-select" formControlName="difficulty">
+            <option value="">Not specified</option>
+            @for (level of difficulties; track level.id) {
+              <option [value]="level.id">{{ level.label }}</option>
+            }
+          </select>
+          @if (form.controls.difficulty.invalid && form.controls.difficulty.touched) {
+            <span class="field-error" role="alert">Select a difficulty.</span>
+          }
+        </div>
+        <div class="form-group">
+          <label for="question-explanation">Explanation</label>
+          <textarea id="question-explanation" class="form-textarea" rows="3" formControlName="explanation" placeholder="Explain the correct answer"></textarea>
+        </div>
+        <div class="form-actions">
+          <button type="button" class="btn-text" (click)="closeForm()">Cancel</button>
+          <button type="submit" class="btn-text" [disabled]="isSaving()">
+            {{ isSaving() ? 'Saving…' : 'Save Question' }}
+          </button>
+        </div>
+      </form>
+    }
+  }
+</app-crt-shell>

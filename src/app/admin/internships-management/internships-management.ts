@@ -65,6 +65,8 @@ export class InternshipsManagement implements OnInit {
       description: ['', Validators.required],
       durationLabel: ['', Validators.required],
       stipendPerMonth: [0, [Validators.required, Validators.min(0)]],
+      price: [0, [Validators.required, Validators.min(0)]],
+      originalPrice: [null as number | null],
       hasPpo: [false],
       skillsCsv: [''],
       status: ['open', Validators.required],
@@ -90,6 +92,8 @@ export class InternshipsManagement implements OnInit {
       description: '',
       durationLabel: '',
       stipendPerMonth: 0,
+      price: 0,
+      originalPrice: null,
       hasPpo: false,
       skillsCsv: '',
       status: 'open',
@@ -110,6 +114,8 @@ export class InternshipsManagement implements OnInit {
       description: row.description,
       durationLabel: row.durationLabel,
       stipendPerMonth: row.stipendPerMonth,
+      price: row.price,
+      originalPrice: row.originalPrice,
       hasPpo: row.hasPpo,
       skillsCsv: row.skills.join(', '),
       status: row.status,
@@ -161,6 +167,11 @@ export class InternshipsManagement implements OnInit {
       description: String(raw.description).trim(),
       durationLabel: String(raw.durationLabel).trim(),
       stipendPerMonth: Number(raw.stipendPerMonth),
+      price: Number(raw.price),
+      originalPrice:
+        raw.originalPrice != null && raw.originalPrice !== ''
+          ? Number(raw.originalPrice)
+          : undefined,
       hasPpo: Boolean(raw.hasPpo),
       skills: this.parseCsv(String(raw.skillsCsv ?? '')),
       status: raw.status as 'open' | 'closed',

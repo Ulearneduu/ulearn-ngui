@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { from, Observable, of } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
-import { InternshipApplication, InternshipApplicationStatus } from '../../models';
+import { InternshipApplication, InternshipApplicationStatus, InternshipEnrollmentFormData } from '../../models';
 import { supabase } from '../../core/supabase.client';
 
 @Injectable({ providedIn: 'root' })
@@ -10,17 +10,46 @@ export class InternshipApplicationService {
     'id, internship_id, user_id, status, applied_at, updated_at';
 
   async applyForInternship(internshipId: string, userId: string): Promise<boolean> {
+    return this.submitEnrollment(internshipId, userId);
+  }
+
+  async submitEnrollment(
+    internshipId: string,
+    userId: string,
+    details?: InternshipEnrollmentFormData,
+    amountPaid?: number
+  ): Promise<boolean> {
     const alreadyApplied = await this.hasApplied(internshipId, userId);
     if (alreadyApplied) return true;
 
-    const { error } = await supabase.from('internship_applications').insert({
+    const payload: Record<string, unknown> = {
       internship_id: internshipId,
       user_id: userId,
       status: 'applied'
-    });
+    };
+
+    if (details) {
+      payload['full_name'] = details.fullName;
+      payload['phone'] = details.phone;
+      payload['email'] = details.email;
+      payload['college_name'] = details.collegeName;
+      payload['degree'] = details.degree;
+      payload['graduation_year'] = details.graduationYear;
+      payload['specialization'] = details.specialization;
+      if (details.couponCode) {
+        payload['coupon_code_used'] = details.couponCode;
+        payload['coupon_discount_percent'] = details.couponDiscountPercent ?? null;
+      }
+    }
+
+    if (amountPaid != null) {
+      payload['amount_paid'] = amountPaid;
+    }
+
+    const { error } = await supabase.from('internship_applications').insert(payload);
 
     if (error) {
-      console.error('InternshipApplicationService.applyForInternship:', error);
+      console.error('InternshipApplicationService.submitEnrollment:', error);
       return false;
     }
     return true;

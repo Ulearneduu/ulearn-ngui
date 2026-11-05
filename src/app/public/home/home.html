@@ -51,36 +51,22 @@
 ════════════════════════════════════════════════════════════════ -->
 <section class="about-section">
   <div class="section-inner">
-    <div class="about-grid">
-
-      <div class="about-visual">
-        @for (stat of aboutStats; track stat.label) {
-          <div class="about-card">
-            <div class="about-icon">{{ stat.icon }}</div>
-            <div class="about-num" [style.color]="stat.color">{{ stat.value }}</div>
-            <div class="about-lbl">{{ stat.label }}</div>
-          </div>
+    <div class="about-content">
+      <div class="section-badge about-badge">About ULearn</div>
+      <h2>We're on a mission to make quality education accessible</h2>
+      <p>
+        ULearn bridges the gap between academic learning and industry expectations.
+        Our courses are built by practitioners — every lesson maps to real-world
+        skills employers want.
+      </p>
+      <ul class="about-points">
+        @for (point of aboutPoints; track point.text) {
+          <li tabindex="0">
+            <span class="check-circle" [style.background]="point.color">✓</span>
+            {{ point.text }}
+          </li>
         }
-      </div>
-
-      <div class="about-content">
-        <div class="section-badge about-badge">About ULearn</div>
-        <h2>We're on a mission to make quality education accessible</h2>
-        <p>
-          ULearn bridges the gap between academic learning and industry expectations.
-          Our courses are built by practitioners — every lesson maps to real-world
-          skills employers want.
-        </p>
-        <ul class="about-points">
-          @for (point of aboutPoints; track point.text) {
-            <li>
-              <span class="check-circle" [style.background]="point.color">✓</span>
-              {{ point.text }}
-            </li>
-          }
-        </ul>
-      </div>
-
+      </ul>
     </div>
   </div>
 </section>

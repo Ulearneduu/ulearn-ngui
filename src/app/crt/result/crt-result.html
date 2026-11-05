@@ -1,0 +1,43 @@
+<section class="crt-result">
+  <header class="page-header">
+    <p class="page-links">
+      @if (pathId()) {
+        <a [routerLink]="['/crt/paths', pathId(), 'modules']">Back to modules</a>
+      } @else {
+        <a routerLink="/crt">Back to CRT Home</a>
+      }
+      <a routerLink="/crt/history">Attempt History</a>
+    </p>
+    <h1>Result</h1>
+  </header>
+
+  @if (loading()) {
+    <p class="status" role="status">Loading result...</p>
+  } @else if (loadError()) {
+    <div class="banner" role="alert">
+      <p>{{ loadError() }}</p>
+      <button type="button" class="btn-primary" (click)="load()">Try again</button>
+    </div>
+  } @else if (!result()) {
+    <p class="status">This submitted result could not be found.</p>
+  } @else {
+    <p class="confirmation" role="status">Your practice was submitted.</p>
+    <dl class="summary">
+      <div>
+        <dt>Score</dt>
+        <dd>{{ scoreText() }}</dd>
+      </div>
+      <div>
+        <dt>Maximum score</dt>
+        <dd>{{ maxScoreText() }}</dd>
+      </div>
+      <div>
+        <dt>Time taken</dt>
+        <dd>{{ timeTaken() }}</dd>
+      </div>
+    </dl>
+    <p class="note">
+      Score, maximum score, and time taken are the values stored for this submitted attempt. Time taken is the duration recorded by the server at submission, not a browser countdown.
+    </p>
+  }
+</section>

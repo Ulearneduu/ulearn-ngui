@@ -2,12 +2,12 @@ import { Injectable, inject } from '@angular/core';
 import { Router } from '@angular/router';
 import { ToastService } from '../../core/services/toast';
 import { AuthService } from '../../core/services/auth.service';
-import { CourseService } from './course.service';
 import { supabase } from '../../core/supabase.client';
 import { environment } from '../../../environments/environment';
-import { EnrollmentFormData } from '../../models';
+import { EnrollmentFormData, InternshipEnrollmentFormData } from '../../models';
 
-export interface PendingEnrollment {
+export interface PendingCourseCheckout {
+  kind: 'course';
   courseId: string;
   slug: string;
   price: number;
@@ -15,6 +15,21 @@ export interface PendingEnrollment {
   title?: string;
   formData: EnrollmentFormData;
 }
+
+export interface PendingInternshipCheckout {
+  kind: 'internship';
+  internshipId: string;
+  price: number;
+  basePrice: number;
+  title?: string;
+  returnUrl?: string;
+  formData: InternshipEnrollmentFormData;
+}
+
+export type PendingCheckout = PendingCourseCheckout | PendingInternshipCheckout;
+
+/** @deprecated Use PendingCourseCheckout — kept for course enroll modal */
+export type PendingEnrollment = PendingCourseCheckout;
 
 interface RazorpayResponse {
   razorpay_order_id: string;
@@ -40,19 +55,42 @@ export class PaymentService {
   private readonly router = inject(Router);
   private readonly toast = inject(ToastService);
   private readonly auth = inject(AuthService);
-  private readonly courseService = inject(CourseService);
 
-  setPendingEnrollment(data: PendingEnrollment): void {
+  setPendingEnrollment(data: Omit<PendingCourseCheckout, 'kind'>): void {
+    this.setPendingCheckout({ kind: 'course', ...data });
+  }
+
+  setPendingInternshipCheckout(data: Omit<PendingInternshipCheckout, 'kind'>): void {
+    this.setPendingCheckout({ kind: 'internship', ...data });
+  }
+
+  setPendingCheckout(data: PendingCheckout): void {
     sessionStorage.setItem(PENDING_KEY, JSON.stringify(data));
   }
 
-  getPendingEnrollment(): PendingEnrollment | null {
+  getPendingCheckout(): PendingCheckout | null {
     try {
       const raw = sessionStorage.getItem(PENDING_KEY);
-      return raw ? (JSON.parse(raw) as PendingEnrollment) : null;
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      if (parsed['kind'] === 'internship') {
+        return parsed as unknown as PendingInternshipCheckout;
+      }
+      if (parsed['kind'] === 'course') {
+        return parsed as unknown as PendingCourseCheckout;
+      }
+      if (parsed['courseId']) {
+        return { kind: 'course', ...(parsed as Omit<PendingCourseCheckout, 'kind'>) };
+      }
+      return null;
     } catch {
       return null;
     }
+  }
+
+  getPendingEnrollment(): PendingCourseCheckout | null {
+    const pending = this.getPendingCheckout();
+    return pending?.kind === 'course' ? pending : null;
   }
 
   clearPendingEnrollment(): void {
@@ -86,7 +124,15 @@ export class PaymentService {
     });
   }
 
-  async startCheckout(pending: PendingEnrollment): Promise<boolean> {
+  async startCheckout(pending: PendingCourseCheckout): Promise<boolean> {
+    return this.processCheckout(pending);
+  }
+
+  async startInternshipCheckout(pending: PendingInternshipCheckout): Promise<boolean> {
+    return this.processCheckout(pending);
+  }
+
+  private async processCheckout(pending: PendingCheckout): Promise<boolean> {
     const user = this.auth.currentUser();
     if (!user) {
       this.toast.error('Please log in to enroll');
@@ -104,9 +150,14 @@ export class PaymentService {
       return false;
     }
 
-    const amountPaise = Math.round(pending.price * 100);
+    const couponCode = pending.formData.couponCode?.trim() || undefined;
+    const orderBody =
+      pending.kind === 'course'
+        ? { courseId: pending.courseId, couponCode }
+        : { internshipId: pending.internshipId, couponCode };
+
     const { data, error } = await supabase.functions.invoke('create-razorpay-order', {
-      body: { courseId: pending.courseId, amount: amountPaise }
+      body: orderBody
     });
 
     if (error || !data?.orderId) {
@@ -122,16 +173,20 @@ export class PaymentService {
       (user.user_metadata?.['full_name'] as string | undefined) ||
       user.email.split('@')[0];
 
+    const description =
+      pending.title ||
+      (pending.kind === 'course' ? 'Course enrollment' : 'Internship enrollment');
+
     return new Promise((resolve) => {
       const options: Record<string, unknown> = {
         key: environment.razorpayKeyId,
         amount: data.amount,
         currency: data.currency,
         name: environment.appName,
-        description: pending.title || `Course enrollment`,
+        description,
         order_id: data.orderId,
         handler: (response: RazorpayResponse) => {
-          void this.verifyAndEnroll(pending, response).then(resolve);
+          void this.verifyAndComplete(pending, response).then(resolve);
         },
         prefill: {
           name: userName,
@@ -157,20 +212,25 @@ export class PaymentService {
     });
   }
 
-  private async verifyAndEnroll(
-    pending: PendingEnrollment,
+  private async verifyAndComplete(
+    pending: PendingCheckout,
     response: RazorpayResponse
   ): Promise<boolean> {
-    const { data, error } = await supabase.functions.invoke('verify-razorpay-payment', {
-      body: {
-        courseId: pending.courseId,
-        razorpay_order_id: response.razorpay_order_id,
-        razorpay_payment_id: response.razorpay_payment_id,
-        razorpay_signature: response.razorpay_signature,
-        enrollmentDetails: pending.formData,
-        amountPaid: pending.price
-      }
-    });
+    const body: Record<string, unknown> = {
+      razorpay_order_id: response.razorpay_order_id,
+      razorpay_payment_id: response.razorpay_payment_id,
+      razorpay_signature: response.razorpay_signature
+    };
+
+    if (pending.kind === 'course') {
+      body['courseId'] = pending.courseId;
+      body['enrollmentDetails'] = pending.formData;
+    } else {
+      body['internshipId'] = pending.internshipId;
+      body['internshipEnrollmentDetails'] = pending.formData;
+    }
+
+    const { data, error } = await supabase.functions.invoke('verify-razorpay-payment', { body });
 
     if (error || !data?.success) {
       console.error('verify-razorpay-payment error:', error, data);
@@ -181,30 +241,61 @@ export class PaymentService {
 
     this.clearPendingEnrollment();
     this.unlockPageScroll();
-    this.toast.success('Payment successful! You are now enrolled.');
-    await this.router.navigate(['/my-courses']);
+    this.toast.success(
+      pending.kind === 'course'
+        ? 'Payment successful! You are now enrolled.'
+        : 'Payment successful! Your internship enrollment is confirmed.'
+    );
+    await this.navigateAfterSuccess(pending);
     return true;
   }
 
-  private async enrollFree(pending: PendingEnrollment): Promise<boolean> {
+  private async enrollFree(pending: PendingCheckout): Promise<boolean> {
     const user = this.auth.currentUser();
     if (!user) return false;
 
-    const ok = await this.courseService.enrollUser(pending.courseId, user.id, pending.formData);
-    if (!ok) {
-      this.toast.error('Enrollment failed');
+    const couponCode = pending.formData.couponCode?.trim() || undefined;
+    const body: Record<string, unknown> = { couponCode };
+
+    if (pending.kind === 'course') {
+      body['courseId'] = pending.courseId;
+      body['enrollmentDetails'] = pending.formData;
+    } else {
+      body['internshipId'] = pending.internshipId;
+      body['internshipEnrollmentDetails'] = pending.formData;
+    }
+
+    const { data, error } = await supabase.functions.invoke('complete-free-enrollment', { body });
+
+    if (error || !data?.success) {
+      console.error('complete-free-enrollment error:', error, data);
+      this.toast.error(data?.error || 'Enrollment failed');
       return false;
     }
 
     this.clearPendingEnrollment();
-    this.toast.success('Enrolled successfully!');
-    await this.router.navigate(['/my-courses']);
+    this.toast.success(
+      pending.kind === 'course' ? 'Enrolled successfully!' : 'Enrolled in internship successfully!'
+    );
+    await this.navigateAfterSuccess(pending);
     return true;
   }
 
+  private async navigateAfterSuccess(pending: PendingCheckout): Promise<void> {
+    if (pending.kind === 'internship' && pending.returnUrl) {
+      await this.router.navigateByUrl(pending.returnUrl);
+      return;
+    }
+    if (pending.kind === 'course') {
+      await this.router.navigate(['/my-courses']);
+      return;
+    }
+    await this.router.navigate(['/internships/short']);
+  }
+
   async resumePendingPayment(): Promise<void> {
-    const pending = this.getPendingEnrollment();
+    const pending = this.getPendingCheckout();
     if (!pending) return;
-    await this.startCheckout(pending);
+    await this.processCheckout(pending);
   }
 }

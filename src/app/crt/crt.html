@@ -1,0 +1,68 @@
+
+<section class="crt-home">
+  <header class="page-header">
+    <h1>Campus Recruitment Training</h1>
+    <p>Your published learning paths. Continue where you left off and build your skills.</p>
+    <p><a routerLink="/crt/history">View Attempt History</a></p>
+    <p class="assignment-note">
+      All published learning paths are displayed for now. Student-specific path assignments
+      will be introduced in CRT-012.
+    </p>
+  </header>
+
+  @if (loading()) {
+    <p class="status" role="status">Loading your learning paths...</p>
+  } @else if (loadError()) {
+    <div class="banner" role="alert">
+      <p>{{ loadError() }}</p>
+      <button type="button" class="btn-primary" (click)="load()">Try again</button>
+    </div>
+  } @else if (paths().length === 0) {
+    <p class="status">
+      No published learning paths are available yet. Please check again later.
+    </p>
+  } @else {
+    <ul class="path-list">
+      @for (item of paths(); track item.path.id) {
+        <li class="path-card">
+          <h2>{{ item.path.title }}</h2>
+
+          @if (item.path.description) {
+            <p>{{ item.path.description }}</p>
+          }
+
+          <div class="progress-info">
+            <span>Progress: {{ item.progress }}%</span>
+            <span>{{ item.attemptedModules }} of {{ item.modules.length }} modules attempted</span>
+          </div>
+
+          <div
+            class="progress-track"
+            role="progressbar"
+            [attr.aria-valuenow]="item.progress"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            [attr.aria-label]="item.path.title + ' progress'"
+          >
+            <div
+              class="progress-fill"
+              [style.width.%]="item.progress"
+            ></div>
+          </div>
+
+          @if (item.modules.length === 0) {
+            <p>No modules are available in this path yet.</p>
+          } @else {
+            <button
+              type="button"
+              class="btn-primary"
+              (click)="continuePath(item)"
+            >
+              Continue
+            </button>
+          }
+        </li>
+      }
+    </ul>
+  }
+</section>

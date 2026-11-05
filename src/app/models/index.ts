@@ -165,11 +165,26 @@ export interface Internship {
   description: string;
   durationLabel: string;
   stipendPerMonth: number;
+  /** One-time enrollment fee (INR); 0 = free enrollment */
+  price: number;
+  originalPrice?: number;
   hasPPO: boolean;
   skills: string[];
   thumbnailUrl?: string;
   status: 'open' | 'closed';
   createdAt: string;
+}
+
+export interface InternshipEnrollmentFormData {
+  fullName: string;
+  phone: string;
+  email: string;
+  collegeName: string;
+  degree: string;
+  graduationYear: number;
+  specialization: string;
+  couponCode?: string;
+  couponDiscountPercent?: number;
 }
 
 export type InternshipApplicationStatus =

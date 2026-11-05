@@ -88,6 +88,36 @@ export const routes: Routes = [
     loadComponent: () => import('./crt/crt').then(m => m.Crt)
   },
   {
+    path: 'crt/paths/:pathId/modules',
+    canActivate: [authGuard, blockExamOnlyGuard, featurePermissionGuard],
+    data: { permission: 'crt.access' },
+    loadComponent: () => import('./crt/modules/crt-modules').then(m => m.CrtModules)
+  },
+  {
+    path: 'crt/paths/:pathId/modules/:moduleId/practice',
+    canActivate: [authGuard, blockExamOnlyGuard, featurePermissionGuard],
+    data: { permission: 'crt.access' },
+    loadComponent: () => import('./crt/practice/crt-practice').then(m => m.CrtPractice)
+  },
+  {
+    path: 'crt/paths/:pathId/modules/:moduleId/attempts/:attemptId/result',
+    canActivate: [authGuard, blockExamOnlyGuard, featurePermissionGuard],
+    data: { permission: 'crt.access' },
+    loadComponent: () => import('./crt/result/crt-result').then(m => m.CrtResult)
+  },
+  {
+    path: 'crt/history',
+    canActivate: [authGuard, blockExamOnlyGuard, featurePermissionGuard],
+    data: { permission: 'crt.access' },
+    loadComponent: () => import('./crt/history/crt-history').then(m => m.CrtHistory)
+  },
+  {
+    path: 'crt/history/:attemptId/review',
+    canActivate: [authGuard, blockExamOnlyGuard, featurePermissionGuard],
+    data: { permission: 'crt.access' },
+    loadComponent: () => import('./crt/review/crt-review').then(m => m.CrtReview)
+  },
+  {
     path: 'interview',
     canActivate: [authGuard, blockExamOnlyGuard, featurePermissionGuard],
     data: { permission: 'interview.access' },

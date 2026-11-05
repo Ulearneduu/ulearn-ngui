@@ -109,6 +109,17 @@
           </div>
         </div>
 
+        <div class="form-row two-col">
+          <div>
+            <label>Enrollment fee (₹) *</label>
+            <input type="number" formControlName="price" min="0" />
+          </div>
+          <div>
+            <label>List price (₹, optional)</label>
+            <input type="number" formControlName="originalPrice" min="0" />
+          </div>
+        </div>
+
         <div class="form-row">
           <label>Description *</label>
           <textarea formControlName="description" rows="3"></textarea>

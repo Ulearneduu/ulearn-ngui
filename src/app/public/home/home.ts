@@ -73,13 +73,6 @@ export class Home implements OnInit, OnDestroy {
   ];
 
   // ── About section ─────────────────────────────────────────────────────────
-  readonly aboutStats = [
-    { icon: '🎓', value: '25+',  label: 'Courses',         color: 'var(--purple)' },
-    { icon: '👨‍🏫', value: '200+', label: 'Expert Mentors',  color: 'var(--green)'  },
-    { icon: '💼', value: '65000+', label: 'Placed Students', color: 'var(--orange)' },
-    { icon: '🏆', value: '4.8★', label: 'Avg Rating',      color: 'var(--blue)'   },
-  ];
-
   readonly aboutPoints = [
     { text: 'Expert-led sessions with industry professionals', color: 'var(--green)'  },
     { text: 'Hands-on projects and portfolio building',  color: 'var(--purple)' },

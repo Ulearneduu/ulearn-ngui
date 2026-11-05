@@ -1,0 +1,178 @@
+
+<app-crt-shell crumb="Learning Paths">
+  <div class="page-head">
+    <h1>Learning Paths</h1>
+  </div>
+
+  @if (isLoading()) {
+    <p class="state" role="status">Loading learning paths…</p>
+  } @else {
+    <div class="toolbar">
+      <label class="search">
+        <span class="visually-hidden">Search learning paths</span>
+        <input
+          type="search"
+          placeholder="Search…"
+          [value]="query()"
+          (input)="onSearch($event)"
+        />
+      </label>
+
+      <div class="filters" role="group" aria-label="Path status">
+        @for (option of filters; track option.id) {
+          <button
+            type="button"
+            class="filter-btn"
+            [class.active]="statusFilter() === option.id"
+            (click)="setFilter(option.id)"
+          >
+            {{ option.label }}
+          </button>
+        }
+      </div>
+
+      <button type="button" class="btn-add" (click)="openCreate()">
+        + Create Path
+      </button>
+    </div>
+
+    @if (paths().length === 0) {
+      <div class="empty">
+        <p>No learning paths yet.</p>
+        <button type="button" class="btn-text" (click)="openCreate()">
+          Create the first path
+        </button>
+      </div>
+    } @else if (visiblePaths().length === 0) {
+      <p class="empty">No learning paths match your search.</p>
+    } @else {
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Path title</th>
+              <th>Description</th>
+              <th>Status</th>
+              <th>Modules</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            @for (path of visiblePaths(); track path.id) {
+              <tr>
+                <td>
+                  <a
+                    class="title-link"
+                    [routerLink]="['/admin/crt/paths', path.id, 'modules']"
+                  >
+                    {{ path.title }}
+                  </a>
+                </td>
+
+                <td class="clamp">{{ path.description || '—' }}</td>
+
+                <td>
+                  <span
+                    class="status-pill"
+                    [attr.data-tone]="path.status"
+                  >
+                    {{ path.status }}
+                  </span>
+                </td>
+
+                <td>{{ moduleCount(path.id) }}</td>
+
+                <td>
+                  <div class="row-actions">
+                    <button type="button" (click)="openEdit(path.id)">
+                      Edit
+                    </button>
+                    <span aria-hidden="true">|</span>
+                    <a
+                      [routerLink]="['/admin/crt/paths', path.id, 'modules']"
+                    >
+                      Open
+                    </a>
+                  </div>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+
+    @if (showForm()) {
+      <form
+        class="form-panel"
+        #formHost
+        [formGroup]="form"
+        (ngSubmit)="save()"
+      >
+        <h2>
+          {{ editingId() ? 'Edit Learning Path' : 'Create Learning Path' }}
+        </h2>
+
+        <div class="form-group">
+          <label for="path-title">Path title *</label>
+          <input
+            id="path-title"
+            class="form-input"
+            type="text"
+            formControlName="title"
+            placeholder="Enter path title"
+          />
+
+          @if (form.controls.title.invalid && form.controls.title.touched) {
+            <span class="field-error" role="alert">
+              Enter a path title of at least 2 characters.
+            </span>
+          }
+        </div>
+
+        <div class="form-group">
+          <label for="path-description">Description</label>
+          <textarea
+            id="path-description"
+            class="form-textarea"
+            rows="3"
+            formControlName="description"
+            placeholder="Enter path description"
+          ></textarea>
+        </div>
+
+        <div class="form-group">
+          <label for="path-status">Status *</label>
+          <select
+            id="path-status"
+            class="form-select"
+            formControlName="status"
+          >
+            <option value="draft">Draft</option>
+            <option value="published">Published</option>
+          </select>
+        </div>
+
+        <div class="form-actions">
+          <button
+            type="button"
+            class="btn-text"
+            (click)="closeForm()"
+            [disabled]="isSaving()"
+          >
+            Cancel
+          </button>
+
+          <button
+            type="submit"
+            class="btn-text"
+            [disabled]="isSaving()"
+          >
+            {{ isSaving() ? 'Saving…' : 'Save Path' }}
+          </button>
+        </div>
+      </form>
+    }
+  }
+</app-crt-shell>

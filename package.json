@@ -6,7 +6,11 @@
     "start": "ng serve",
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
-    "test": "ng test"
+    "test": "ng test",
+    "test:enrollment-payment": "node scripts/test-enrollment-payment-logic.mjs",
+    "test:enrollment-finalize": "node scripts/test-enrollment-finalize-logic.mjs",
+    "test:razorpay-payment-verify": "node scripts/test-razorpay-payment-verify.mjs",
+    "check:edge-verify-payment": "deno check supabase/functions/verify-razorpay-payment/index.ts"
   },
   "private": true,
   "packageManager": "npm@10.8.3",

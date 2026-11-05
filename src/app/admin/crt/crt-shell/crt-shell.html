@@ -1,0 +1,22 @@
+
+
+<div class="crt-frame">
+  <aside class="crt-nav" aria-label="CRT Admin">
+    <p class="crt-nav-title">CRT Admin</p>
+    <a routerLink="/admin/crt/paths" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">
+      Learning Paths
+    </a>
+    <a [routerLink]="modulesLink()" routerLinkActive="active">Modules</a>
+    <a routerLink="/admin/crt/questions" routerLinkActive="active">Questions</a>
+    <a routerLink="/admin/crt/assignments" routerLinkActive="active">Batch Assignments</a>
+  </aside>
+
+  <div class="crt-body">
+    <p class="crumb">
+      <a routerLink="/admin/crt/paths">CRT Admin</a>
+      <span aria-hidden="true">/</span>
+      <span>{{ crumb() }}</span>
+    </p>
+    <ng-content />
+  </div>
+</div>

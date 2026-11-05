@@ -136,78 +136,145 @@ h1 {
   padding: $section-pad-y $section-pad-x;
 }
 
-.about-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 56px;
-  align-items: center;
-}
-
-.about-visual {
-  background: linear-gradient(135deg, #f0eafa, #e8f5e9);
-  border-radius: 24px;
-  padding: 40px;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-}
-
-.about-card {
-  background: #fff;
-  border-radius: 16px;
-  padding: 20px;
-  box-shadow: 0 4px 20px rgba(0,0,0,.06);
-  text-align: center;
-}
-
-.about-icon { font-size: 2rem; margin-bottom: 8px; }
-
-.about-num {
-  font-family: $font-heading;
-  font-size: 1.5rem;
-  font-weight: 800;
-}
-
-.about-lbl {
-  font-size: 0.75rem;
-  font-weight: 700;
-  color: var(--muted);
-}
-
 .about-content {
+  max-width: 100%;
+
   h2 {
     font-family: $font-heading;
     font-size: 1.9rem;
     font-weight: 800;
-    margin-bottom: 16px;
+    margin: 0 0 16px;
   }
   p {
     color: var(--muted);
     font-size: 0.93rem;
     line-height: 1.8;
     font-weight: 600;
-    margin-bottom: 16px;
+    margin: 0 0 20px;
   }
 }
 
 .about-badge {
   background: rgba(139,111,190,.12);
   color: var(--purple);
-  margin-bottom: 14px;
 }
 
 .about-points {
   list-style: none;
+  margin: 0;
+  padding: 0;
   display: flex;
   flex-direction: column;
   gap: 12px;
 
   li {
+    --about-point-glow: var(--green);
+    position: relative;
+    isolation: isolate;
     display: flex;
     align-items: center;
     gap: 12px;
     font-weight: 700;
     font-size: 0.88rem;
+    outline: none;
+
+    &::before,
+    &::after {
+      content: '';
+      position: absolute;
+      inset: -3px -8px;
+      border-radius: 12px;
+      pointer-events: none;
+      opacity: 0;
+      z-index: -1;
+    }
+
+    &::before {
+      box-shadow:
+        0 0 14px 3px color-mix(in srgb, var(--about-point-glow) 38%, transparent),
+        0 0 28px 10px color-mix(in srgb, var(--about-point-glow) 20%, transparent);
+      transition:
+        opacity 0.4s ease,
+        box-shadow 0.4s ease;
+    }
+
+    &::after {
+      background: linear-gradient(
+        105deg,
+        transparent 42%,
+        rgba(255, 255, 255, 0.45) 50%,
+        transparent 58%
+      );
+      background-size: 220% 100%;
+      background-position: 120% 0;
+      mix-blend-mode: soft-light;
+      transition: opacity 0.4s ease;
+    }
+
+    &:nth-child(1) { --about-point-glow: var(--green); }
+    &:nth-child(2) { --about-point-glow: var(--purple); }
+    &:nth-child(3) { --about-point-glow: var(--orange); }
+    &:nth-child(4) { --about-point-glow: var(--blue); }
+    &:nth-child(5) { --about-point-glow: var(--red); }
+
+    @media (hover: hover) {
+      &:hover {
+        &::before {
+          opacity: 1;
+        }
+
+        &::after {
+          opacity: 0.55;
+          animation: about-point-shimmer 2.8s ease-in-out infinite;
+        }
+      }
+    }
+
+    &:active {
+      &::before {
+        opacity: 1;
+        box-shadow:
+          0 0 18px 4px color-mix(in srgb, var(--about-point-glow) 48%, transparent),
+          0 0 36px 14px color-mix(in srgb, var(--about-point-glow) 28%, transparent);
+        transition-duration: 0.2s;
+      }
+
+      &::after {
+        opacity: 0.65;
+      }
+    }
+
+    &:focus-visible {
+      outline: 2px solid color-mix(in srgb, var(--about-point-glow) 65%, var(--navy));
+      outline-offset: 3px;
+
+      &::before {
+        opacity: 1;
+        box-shadow:
+          0 0 18px 4px color-mix(in srgb, var(--about-point-glow) 48%, transparent),
+          0 0 36px 14px color-mix(in srgb, var(--about-point-glow) 28%, transparent);
+        transition-duration: 0.2s;
+      }
+
+      &::after {
+        opacity: 0.45;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      &::after {
+        animation: none !important;
+      }
+    }
+  }
+}
+
+@keyframes about-point-shimmer {
+  0%, 100% {
+    background-position: 120% 0;
+  }
+  50% {
+    background-position: -20% 0;
   }
 }
 
@@ -991,8 +1058,6 @@ h1 {
   .blogs-section,
   .testimonials-section { padding: 48px 16px; }
 
-  .about-grid { grid-template-columns: 1fr; gap: 28px; }
-  .about-visual { padding: 20px; gap: 12px; }
   .about-content h2 { font-size: 1.5rem; }
 
   .research-card {
@@ -1019,5 +1084,4 @@ h1 {
   .stat-num { font-size: 1.4rem; }
   .story-card { width: min(260px, 80vw); }
   .research-stats { gap: 12px; }
-  .about-visual { padding: 16px; }
 }

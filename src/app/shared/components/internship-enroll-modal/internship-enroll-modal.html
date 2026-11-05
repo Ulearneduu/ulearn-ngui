@@ -1,0 +1,199 @@
+@if (internship(); as intern) {
+  <div class="enroll-overlay" (click)="close()" aria-hidden="true"></div>
+  <div class="enroll-dialog" role="dialog" aria-modal="true" aria-label="Enroll in internship">
+    <header class="enroll-hero">
+      <div class="enroll-hero-glow" aria-hidden="true"></div>
+      <div class="enroll-hero-content">
+        <span class="enroll-badge">💼 Enroll now</span>
+        <h2>{{ intern.title }}</h2>
+        <p>Complete your details to enroll in this internship</p>
+      </div>
+      <button type="button" class="enroll-close" (click)="close()" aria-label="Close">✕</button>
+    </header>
+
+    <form [formGroup]="form" (ngSubmit)="onSubmit()" class="enroll-form">
+      <div class="enroll-layout">
+        <div class="enroll-fields">
+          <section class="field-card field-card--purple">
+            <h3><span class="step-dot">1</span> Personal details</h3>
+            <div class="field-grid field-grid--2">
+              <div class="field">
+                <label for="intern-enroll-fullName">Full name</label>
+                <input id="intern-enroll-fullName" type="text" formControlName="fullName" />
+                @if (isFieldInvalid('fullName')) {
+                  <span class="field-error">Required</span>
+                }
+              </div>
+              <div class="field">
+                <label for="intern-enroll-phone">Phone number</label>
+                <input id="intern-enroll-phone" type="tel" formControlName="phone" placeholder="+91 9876543210" />
+                @if (isFieldInvalid('phone')) {
+                  <span class="field-error">Valid phone required</span>
+                }
+              </div>
+            </div>
+            <div class="field">
+              <label for="intern-enroll-email">Email address</label>
+              <input id="intern-enroll-email" type="email" formControlName="email" readonly class="readonly" />
+            </div>
+          </section>
+
+          <section class="field-card field-card--blue">
+            <h3><span class="step-dot">2</span> Academic details</h3>
+            <app-searchable-select
+              formControlName="collegeName"
+              label="College / University"
+              placeholder="Search colleges..."
+              [searchFn]="searchColleges"
+            />
+            @if (isFieldInvalid('collegeName')) {
+              <span class="field-error">College is required</span>
+            }
+
+            @if (showOtherCollege()) {
+              <div class="field">
+                <label for="intern-enroll-otherCollege">College name</label>
+                <input id="intern-enroll-otherCollege" type="text" formControlName="otherCollegeName" placeholder="Enter college name" />
+                @if (isFieldInvalid('otherCollegeName')) {
+                  <span class="field-error">Required</span>
+                }
+              </div>
+            }
+
+            <div class="field-grid field-grid--2">
+              <div class="field">
+                <label for="intern-enroll-degree">Degree</label>
+                <select id="intern-enroll-degree" formControlName="degree">
+                  <option value="">Select</option>
+                  <option value="B.Tech">B.Tech</option>
+                  <option value="B.Sc">B.Sc</option>
+                  <option value="B.A">B.A</option>
+                  <option value="B.Com">B.Com</option>
+                  <option value="BCA">BCA</option>
+                  <option value="M.Tech">M.Tech</option>
+                  <option value="M.Sc">M.Sc</option>
+                  <option value="MBA">MBA</option>
+                  <option value="Other">Other</option>
+                </select>
+                @if (isFieldInvalid('degree')) {
+                  <span class="field-error">Required</span>
+                }
+              </div>
+              <div class="field">
+                <label for="intern-enroll-gradYear">Graduation year</label>
+                <select id="intern-enroll-gradYear" formControlName="graduationYear">
+                  <option value="">Select</option>
+                  @for (year of graduationYears(); track year) {
+                    <option [value]="year">{{ year }}</option>
+                  }
+                </select>
+                @if (isFieldInvalid('graduationYear')) {
+                  <span class="field-error">Required</span>
+                }
+              </div>
+            </div>
+
+            <app-searchable-select
+              formControlName="specialization"
+              label="Specialization / Branch"
+              placeholder="Search branch..."
+              [searchFn]="searchSpecializations"
+            />
+            @if (isFieldInvalid('specialization')) {
+              <span class="field-error">Required</span>
+            }
+          </section>
+
+          <section class="field-card field-card--orange">
+            <h3><span class="step-dot">3</span> Internship details</h3>
+            <div class="internship-summary">
+              <p class="internship-summary-title">{{ intern.title }}</p>
+              <ul class="internship-summary-meta">
+                <li><strong>Type:</strong> {{ getTypeLabel(intern.type) }}</li>
+                <li><strong>Mode:</strong> {{ intern.mode | titlecase }}</li>
+                <li><strong>Duration:</strong> {{ intern.durationLabel }}</li>
+                <li><strong>Domain:</strong> {{ intern.domain }}</li>
+                <li><strong>Stipend:</strong> {{ formatStipend(intern.stipendPerMonth) }}</li>
+                @if (intern.hasPPO) {
+                  <li><strong>PPO:</strong> Available</li>
+                }
+              </ul>
+            </div>
+          </section>
+        </div>
+
+        <aside class="enroll-sidebar">
+          <section class="coupon-card">
+            <h3>🏷️ Coupon</h3>
+            <div class="coupon-input-row">
+              <input
+                type="text"
+                formControlName="couponCode"
+                placeholder="CODE"
+                (blur)="applyCoupon()"
+              />
+              <button type="button" class="coupon-apply" (click)="applyCoupon()" [disabled]="isValidatingCoupon()">
+                {{ isValidatingCoupon() ? '…' : 'Apply' }}
+              </button>
+            </div>
+            @if (couponMessage()) {
+              <p class="coupon-status" [class.ok]="couponValid()" [class.bad]="!couponValid()">
+                {{ couponMessage() }}
+              </p>
+            }
+            @if (couponValid()) {
+              <button type="button" class="coupon-clear" (click)="clearCoupon()">Remove coupon</button>
+            }
+          </section>
+
+          <section class="price-card">
+            @if (isFreeEnrollment()) {
+              <div class="price-row">
+                <span>Enrollment fee</span>
+                <span>Free enrollment</span>
+              </div>
+            } @else {
+              @if (showListPrice()) {
+                <div class="price-row muted">
+                  <span>List price</span>
+                  <span>{{ formatPrice(listPrice()) }}</span>
+                </div>
+                @if (getListDiscountPercent() > 0) {
+                  <div class="price-row muted">
+                    <span>List discount</span>
+                    <span>−{{ formatPrice(listDiscountAmount()) }} ({{ getListDiscountPercent() }}% off)</span>
+                  </div>
+                }
+              }
+              <div class="price-row">
+                <span>Enrollment fee</span>
+                <span>{{ formatPrice(basePrice()) }}</span>
+              </div>
+            }
+            @if (couponValid() && couponDiscount() > 0 && !isFreeEnrollment()) {
+              <div class="price-row save">
+                <span>Coupon discount ({{ couponDiscount() }}%)</span>
+                <span>−{{ formatPrice(couponDiscountAmount()) }}</span>
+              </div>
+            }
+            <div class="price-total">
+              <span>Final payable</span>
+              <strong>{{ formatPrice(finalPrice()) }}</strong>
+            </div>
+          </section>
+
+          <div class="sidebar-actions">
+            <button type="submit" class="btn-pay" [disabled]="!canPay()">
+              @if (isSubmitting()) {
+                <span class="btn-spinner"></span> Processing…
+              } @else {
+                {{ payButtonLabel() }}
+              }
+            </button>
+            <button type="button" class="btn-cancel" (click)="close()">Cancel</button>
+          </div>
+        </aside>
+      </div>
+    </form>
+  </div>
+}

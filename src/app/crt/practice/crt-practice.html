@@ -1,0 +1,96 @@
+<section class="crt-practice">
+  <header class="page-header">
+    <a [routerLink]="['/crt/paths', pathId, 'modules']">Back to modules</a>
+    <h1>Practice</h1>
+  </header>
+
+  @if (loading()) {
+    <p class="status" role="status">Loading practice...</p>
+  } @else if (loadError()) {
+    <div class="banner" role="alert">
+      <p>{{ loadError() }}</p>
+      <button type="button" class="btn-primary" (click)="load()">Try again</button>
+    </div>
+  } @else if (questions().length === 0) {
+    <p class="status">This module has no questions yet.</p>
+  } @else {
+    <div class="meta">
+      <p>Question {{ questionNumber() }} of {{ questions().length }}</p>
+      <p>Answered {{ answeredCount() }} of {{ questions().length }}</p>
+      <p class="timer">
+        Elapsed {{ elapsedLabel() }}
+        <span>
+          Elapsed time is measured in this browser from the attempt start. There is no configured time limit. The server records the elapsed duration when you submit.
+        </span>
+      </p>
+    </div>
+
+    @if (saveError()) {
+      <div class="banner" role="alert">
+        <p>{{ saveError() }}</p>
+      </div>
+    }
+
+    @if (currentQuestion(); as question) {
+      <article class="question">
+        <h2>{{ question.stem }}</h2>
+        <div class="options" role="radiogroup" [attr.aria-label]="'Question ' + questionNumber()">
+          @for (option of question.options; track $index) {
+            <label [class.selected]="isSelected($index)">
+              <input
+                type="radio"
+                [name]="question.id"
+                [checked]="isSelected($index)"
+                [disabled]="answersLocked()"
+                (change)="selectOption(optionIndex($index))"
+              />
+              <span>{{ optionLabel($index) }}. {{ option }}</span>
+            </label>
+          }
+        </div>
+      </article>
+    }
+
+    @if (saving()) {
+      <p class="status" role="status">Saving answer...</p>
+    }
+    @if (submitting()) {
+      <p class="status" role="status">Submitting practice...</p>
+    }
+    @if (submitError()) {
+      <div class="banner" role="alert">
+        <p>{{ submitError() }}</p>
+      </div>
+    }
+
+    @if (submitted()) {
+      <p class="result" role="status">
+        Submitted. Server score: {{ officialScore()?.attempt_score }} of {{ officialScore()?.attempt_max_score }}.
+      </p>
+    } @else if (confirming()) {
+      <div class="confirm" role="alertdialog" aria-label="Confirm submission">
+        <p>Submit this practice? Unanswered questions stay unanswered. The server scores the attempt.</p>
+        <button type="button" class="btn-primary" [disabled]="saving() || submitting()" (click)="confirmSubmit()">
+          Submit practice
+        </button>
+        <button type="button" class="btn-secondary" [disabled]="submitting()" (click)="cancelSubmit()">
+          Keep practicing
+        </button>
+      </div>
+    }
+
+    <div class="actions">
+      <button type="button" class="btn-secondary" [disabled]="questionIndex() === 0" (click)="previous()">
+        Previous
+      </button>
+      <button type="button" class="btn-secondary" [disabled]="questionIndex() >= questions().length - 1" (click)="next()">
+        Next
+      </button>
+      @if (!submitted() && !confirming()) {
+        <button type="button" class="btn-primary" [disabled]="answersLocked()" (click)="requestSubmit()">
+          Submit
+        </button>
+      }
+    </div>
+  }
+</section>

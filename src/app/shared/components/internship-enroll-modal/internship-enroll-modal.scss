@@ -1,0 +1,30 @@
+@import '../enroll-modal/enroll-modal.scss';
+
+.internship-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.internship-summary-title {
+  margin: 0;
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--text-primary, #1a1a2e);
+}
+
+.internship-summary-meta {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 0.9rem;
+  color: var(--text-secondary, #555);
+
+  li strong {
+    color: var(--text-primary, #1a1a2e);
+    font-weight: 600;
+  }
+}
