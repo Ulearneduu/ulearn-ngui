@@ -16,7 +16,9 @@
 
 Madhu confirmed OpenAI for v1 and that any suitable OpenAI model is acceptable. The selected model id is `gpt-6-luna`. The official model page lists Chat Completions as supported for that id ([GPT-6 Luna](https://developers.openai.com/api/docs/models/gpt-6-luna)). The function sends `model`, `messages`, `reasoning_effort: "low"`, and `max_completion_tokens`. It does not send `temperature`. OpenAI's GPT-6 guide says sampling parameters are unsupported unless reasoning effort is `none`, and Luna's default effort is `medium` ([Using GPT-6](https://developers.openai.com/api/docs/guides/latest-model)). `max_completion_tokens` is 2048 because that cap includes reasoning tokens.
 
-The browser never calls OpenAI. `interview-turn` reads the key only with `Deno.env.get('OPENAI_API_KEY')`. If `INTERVIEW_AI_MODEL` is unset, the function uses `gpt-6-luna`. Do not configure Gemini. Do not put the key in Angular, `environment.ts`, Git, or any client bundle. `supabase/functions/env.example` lists the model id and leaves the key empty.
+The browser never calls OpenAI. `interview-turn` and `interview-evaluate` read the key only with `Deno.env.get('OPENAI_API_KEY')`. If `INTERVIEW_AI_MODEL` is unset, both functions use `gpt-6-luna`. Do not configure Gemini. Do not put the key in Angular, `environment.ts`, Git, or any client bundle. `supabase/functions/env.example` lists the model id and leaves the key empty.
+
+`interview-evaluate` is the INT-008 scoring pass. It uses the same secrets, endpoint, and model. Its completion cap is `max_completion_tokens: 4096` because the response is a JSON scorecard. It still sends `reasoning_effort: "low"` and does not send `temperature`. See `docs/interview/INT-008.md`.
 
 ```bash
 supabase secrets set OPENAI_API_KEY=... INTERVIEW_AI_PROVIDER=openai INTERVIEW_AI_MODEL=gpt-6-luna

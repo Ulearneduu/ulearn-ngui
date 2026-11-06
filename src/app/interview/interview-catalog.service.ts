@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { invokeAuthedFunction, supabase } from '../core/supabase.client';
 import {
+  InterviewEvaluationSnapshot,
   InterviewSessionStatus,
   InterviewSessionSummary,
   InterviewTemplate,
@@ -14,6 +15,11 @@ import {
   parseInterviewTurnResponse,
   type InterviewTurnResponse,
 } from './interview-api';
+import {
+  parseEvaluationSnapshot,
+  parseInterviewEvaluationResponse,
+  type InterviewEvaluationResponse,
+} from './interview-evaluation';
 import { positiveDurationMinutes } from './interview-timer';
 
 const TEMPLATE_KINDS: readonly InterviewTemplateKind[] = ['hr', 'technical', 'domain'];
@@ -308,6 +314,52 @@ export class InterviewCatalogService {
       throw new Error('This interview could not be ended. Please try again.');
     }
     return result.session;
+  }
+
+  /**
+   * Evaluation metadata, competency rows for the saved version, and the full transcript.
+   * A missing session and another student's session both come back as null.
+   */
+  async getOwnEvaluation(sessionId: string): Promise<InterviewEvaluationSnapshot | null> {
+    const { data, error } = await supabase
+      .from('interview_sessions')
+      .select('id, status, template_id, prompt_version, started_at, ended_at, overall_score, evaluation_status, eval_version, evaluated_at, evaluation_summary, evaluation_strengths, evaluation_improvements, evaluation_claimed_at, interview_templates(title, kind, duration_minutes)')
+      .eq('id', sessionId)
+      .maybeSingle();
+    if (error) throw error;
+    if (!isRecord(data)) return null;
+
+    const version = typeof data['eval_version'] === 'string' ? data['eval_version'] : '';
+    let scoreQuery = supabase
+      .from('interview_scores')
+      .select('id, competency, score, rationale, evidence, eval_version, created_at')
+      .eq('session_id', sessionId)
+      .order('created_at', { ascending: true });
+    if (version) scoreQuery = scoreQuery.eq('eval_version', version);
+    const scores = await scoreQuery;
+    if (scores.error) throw scores.error;
+
+    const turns = await this.listOwnTurns(sessionId);
+    return parseEvaluationSnapshot(data, scores.data ?? [], turns);
+  }
+
+  /**
+   * Ask the evaluation function to score a completed session.
+   * The body carries only the session id. Scores in a client payload are not sent.
+   */
+  async requestEvaluation(sessionId: string): Promise<InterviewEvaluationResponse> {
+    const { data, error } = await invokeAuthedFunction<unknown>('interview-evaluate', { sessionId });
+    if (error) {
+      throw await interviewFunctionError(error, 'The evaluation could not be requested. Your interview is saved.');
+    }
+    const parsed = parseInterviewEvaluationResponse(data);
+    if (!parsed) {
+      throw new InterviewRequestError(
+        'The evaluation response was incomplete. Your interview is saved.',
+        'BAD_RESPONSE'
+      );
+    }
+    return parsed;
   }
 }
 

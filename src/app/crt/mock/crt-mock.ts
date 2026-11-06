@@ -125,6 +125,15 @@ import {
       questionId: string,
       selectedIndex: number
     ): Promise<void> {
+      if (
+        selectedIndex !== 0 &&
+        selectedIndex !== 1 &&
+        selectedIndex !== 2 &&
+        selectedIndex !== 3
+      ) {
+        return;
+      }
+
       const savePromise = this.mockService
         .saveAnswer(this.attemptId, questionId, selectedIndex)
         .then(() => {

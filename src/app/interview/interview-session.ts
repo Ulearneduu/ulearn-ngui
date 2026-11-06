@@ -10,7 +10,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { map } from 'rxjs';
 import { InterviewSessionSummary, InterviewTurn } from '../models';
 import { InterviewRequestError } from './interview-api';
@@ -105,7 +105,10 @@ const AI_FAILURE_CODES = new Set([
                 <p>{{ endedByTime() ? 'Time remaining 00:00' : 'Time spent ' + spent }}</p>
               }
             </div>
-            <a class="primary wide" routerLink="/interview">Back to Interview Catalog</a>
+            @if (current.status === 'completed') {
+              <a class="primary wide" [routerLink]="['/interview/session', current.id, 'result']">View results</a>
+            }
+            <a class="secondary wide" routerLink="/interview">Back to Interview Catalog</a>
             @if (draft()) {
               <label class="field-label" for="unsent-answer">Unsent answer</label>
               <textarea id="unsent-answer" [value]="draft()" readonly rows="4"></textarea>
@@ -314,7 +317,7 @@ const AI_FAILURE_CODES = new Set([
                 <svg viewBox="0 0 24 24"><path d="M5 21V4h9l1 3h5v10h-6l-1-3H7v7"/></svg>
               </span>
               <h2 id="end-title">End this interview?</h2>
-              <p>Ending will complete your current session. You won't be able to send any more answers in this interview.</p>
+              <p>Ending will complete your current session and open your results. You won't be able to send any more answers in this interview.</p>
               <button type="button" class="primary wide" (click)="confirmEndNow()" [disabled]="ending()">
                 {{ ending() ? 'Ending…' : 'End Interview' }}
               </button>
@@ -549,6 +552,7 @@ const AI_FAILURE_CODES = new Set([
 })
 export class InterviewSession {
   private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
   private readonly catalog = inject(InterviewCatalogService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly transcript = viewChild<ElementRef<HTMLElement>>('transcript');
@@ -800,6 +804,8 @@ export class InterviewSession {
       if (result.session?.status === 'completed') {
         this.session.set(result.session);
         this.expireError.set(null);
+        void this.catalog.requestEvaluation(sessionId).catch(() => undefined);
+        await this.router.navigate(['/interview/session', sessionId, 'result']);
         return;
       }
       if (!result.timeUp && result.serverNow) {
@@ -844,16 +850,22 @@ export class InterviewSession {
     this.ending.set(true);
     this.submitError.set(null);
     this.submitNotice.set(null);
+    let completed = false;
     try {
       const updated = await this.catalog.completeOwnSession(current.id);
       if (updated.status !== 'completed') {
         throw new Error('This interview could not be ended.');
       }
+      completed = true;
       this.session.set(updated);
       this.confirmOpen.set(false);
+      void this.catalog.requestEvaluation(updated.id).catch(() => undefined);
+      await this.router.navigate(['/interview/session', updated.id, 'result']);
     } catch (error: unknown) {
-      this.submitError.set(interviewErrorMessage(error, 'This interview could not be ended.'));
-      this.confirmOpen.set(false);
+      if (!completed) {
+        this.submitError.set(interviewErrorMessage(error, 'This interview could not be ended.'));
+        this.confirmOpen.set(false);
+      }
     } finally {
       this.ending.set(false);
     }
