@@ -1,13 +1,13 @@
 
 import {
-    ChangeDetectionStrategy,
-    Component,
-    OnDestroy,
-    OnInit,
-    computed,
-    signal,
-  } from '@angular/core';
-  import { ActivatedRoute, Router } from '@angular/router';
+  ChangeDetectionStrategy,
+  Component,
+  OnDestroy,
+  OnInit,
+  computed,
+  signal,
+} from '@angular/core';
+import { ActivatedRoute, Router } from '@angular/router';
   import {
     CrtMockQuestion,
     CrtMockService,
@@ -106,8 +106,7 @@ import {
       if (
         !question ||
         this.isSubmitting() ||
-        index < 0 ||
-        index > 3
+        (index !== 0 && index !== 1 && index !== 2 && index !== 3)
       ) {
         return;
       }
@@ -123,7 +122,7 @@ import {
 
     private async saveSelectedAnswer(
       questionId: string,
-      selectedIndex: number
+      selectedIndex: 0 | 1 | 2 | 3
     ): Promise<void> {
       if (
         selectedIndex !== 0 &&

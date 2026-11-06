@@ -1,13 +1,14 @@
 
 import {
-    ChangeDetectionStrategy,
-    Component,
-    OnInit,
-    computed,
-    signal,
-  } from '@angular/core';
-  import { DecimalPipe } from '@angular/common';
-  import { ActivatedRoute, RouterLink } from '@angular/router';
+  ChangeDetectionStrategy,
+  Component,
+  OnInit,
+  computed,
+  signal,
+} from '@angular/core';
+
+import { DecimalPipe } from '@angular/common';
+import { ActivatedRoute, RouterLink } from '@angular/router';
   import {
     CrtMockResultSection,
     CrtMockService,

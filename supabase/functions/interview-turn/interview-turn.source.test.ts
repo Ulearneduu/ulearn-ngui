@@ -57,6 +57,24 @@ test('the edge function authorizes before it calls the provider or inserts turns
   assert.equal(sql.includes('CREATE POLICY "Users delete'), false);
 });
 
+test('an AI failure marks the session failed before any turn is inserted', () => {
+  const source = read('supabase/functions/interview-turn/index.ts');
+  const handler = source.slice(source.indexOf('Deno.serve'), source.indexOf('async function insertTurns'));
+  const calls = handler.match(/markSessionFailed\(/g) ?? [];
+  assert.equal(calls.length, 2);
+  assert.ok(handler.lastIndexOf('markSessionFailed(') < handler.indexOf('insertTurns('));
+  assert.ok(handler.indexOf("code: 'AI_NOT_CONFIGURED'") > handler.indexOf('markSessionFailed('));
+  const unsuccessful = handler.slice(handler.indexOf('if (!reply.ok)'), handler.indexOf('noteAssistantText'));
+  assert.match(unsuccessful, /markSessionFailed\(/);
+  assert.equal(unsuccessful.includes('insertTurns('), false);
+  const failSession = source.slice(source.indexOf('async function markSessionFailed'));
+  assert.match(failSession, /status: 'failed'/);
+  assert.match(failSession, /ended_at: new Date\(\)\.toISOString\(\)/);
+  assert.match(failSession, /\.eq\('status', 'in_progress'\)/);
+  assert.equal(source.includes(".from('interview_turns').delete"), false);
+  assert.equal(/from\('interview_turns'\)[\s\S]{0,40}\.delete\(/.test(source), false);
+});
+
 test('Angular interview code does not select prompts or privileged keys', () => {
   const files = [
     'src/app/interview/interview-catalog.service.ts',

@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } from '@angular/core';
-import { Router } from '@angular/router';
+import { Router, RouterLink, RouterLinkActive } from '@angular/router';
 import { InterviewTemplate, InterviewTemplateKind } from '../models';
 import { InterviewCatalogService, interviewErrorMessage } from './interview-catalog.service';
 import { InterviewQuota, InterviewService } from './interview.service';
@@ -34,6 +34,7 @@ const KIND_ORDER: readonly InterviewTemplateKind[] = ['hr', 'technical', 'domain
   selector: 'app-interview',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [RouterLink, RouterLinkActive],
   template: `
     <div class="interview-page">
       <header class="page-header">
@@ -58,6 +59,13 @@ const KIND_ORDER: readonly InterviewTemplateKind[] = ['hr', 'technical', 'domain
           }
         </section>
       }
+
+      <nav class="interview-tabs" aria-label="Interview sections">
+        <a routerLink="/interview" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">
+          Catalog
+        </a>
+        <a routerLink="/interview/history" routerLinkActive="active">History</a>
+      </nav>
 
       @if (loading()) {
         <p class="status" role="status">Loading interviews…</p>
@@ -134,6 +142,28 @@ const KIND_ORDER: readonly InterviewTemplateKind[] = ['hr', 'technical', 'domain
     .quota-card .meta + .meta,
     .quota-card .status {
       margin-top: 8px;
+    }
+    .interview-tabs {
+      display: flex;
+      gap: 8px;
+      margin: 24px 0 28px;
+      padding: 4px;
+      border-radius: 10px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      width: fit-content;
+    }
+    .interview-tabs a {
+      padding: 8px 16px;
+      border-radius: 8px;
+      text-decoration: none;
+      font-size: 0.9375rem;
+      font-weight: 600;
+      color: var(--muted);
+    }
+    .interview-tabs a.active {
+      background: var(--navy);
+      color: #fff;
     }
     .group {
       margin-top: 32px;

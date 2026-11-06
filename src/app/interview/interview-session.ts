@@ -105,10 +105,47 @@ const AI_FAILURE_CODES = new Set([
                 <p>{{ endedByTime() ? 'Time remaining 00:00' : 'Time spent ' + spent }}</p>
               }
             </div>
+            @if (current.status === 'failed' && submitError()) {
+              <p class="alert error" role="alert">{{ submitError() }}</p>
+            }
+            @if (current.status === 'failed') {
+              <div class="surface transcript-saved">
+                <div class="conversation" role="log" aria-label="Saved interview transcript">
+                  @if (turns().length === 0) {
+                    <p class="empty">No messages were saved before the interview stopped.</p>
+                  }
+                  @for (turn of turns(); track turn.id) {
+                    @if (turn.role === 'assistant') {
+                      <article class="turn interviewer">
+                        <span class="mark" aria-hidden="true">
+                          <svg viewBox="0 0 24 24"><path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6L12 3z"/></svg>
+                        </span>
+                        <div>
+                          <p class="who">AI interviewer</p>
+                          <p class="content">{{ turn.content }}</p>
+                        </div>
+                      </article>
+                    } @else {
+                      <article class="turn student">
+                        <span class="avatar" aria-hidden="true">
+                          <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3"/><path d="M6 19c1.5-3 3.5-4 6-4s4.5 1 6 4"/></svg>
+                        </span>
+                        <div>
+                          <p class="who">You · Saved</p>
+                          <p class="content">{{ turn.content }}</p>
+                        </div>
+                      </article>
+                    }
+                  }
+                </div>
+              </div>
+            }
             @if (current.status === 'completed') {
               <a class="primary wide" [routerLink]="['/interview/session', current.id, 'result']">View results</a>
+              <a class="secondary wide" routerLink="/interview">Back to Interview Catalog</a>
+            } @else {
+              <a class="primary wide" routerLink="/interview">Back to Interview Catalog</a>
             }
-            <a class="secondary wide" routerLink="/interview">Back to Interview Catalog</a>
             @if (draft()) {
               <label class="field-label" for="unsent-answer">Unsent answer</label>
               <textarea id="unsent-answer" [value]="draft()" readonly rows="4"></textarea>
@@ -395,6 +432,8 @@ const AI_FAILURE_CODES = new Set([
       box-shadow: 0 4px 24px #00000012;
       overflow: hidden;
     }
+    .transcript-saved { width: 100%; margin: 20px 0; text-align: left; }
+    .outcome .alert { width: 100%; margin: 16px 0 0; box-sizing: border-box; }
     .conversation {
       display: flex;
       flex-direction: column;
@@ -776,7 +815,12 @@ export class InterviewSession {
     } catch (error: unknown) {
       this.noteSubmitFailure(error);
       const code = error instanceof InterviewRequestError ? error.code : '';
-      if (code === 'SESSION_EXPIRED' || code === 'SESSION_CLOSED' || code === 'NOT_FOUND') {
+      if (
+        code === 'SESSION_EXPIRED' ||
+        code === 'SESSION_CLOSED' ||
+        code === 'NOT_FOUND' ||
+        AI_FAILURE_CODES.has(code)
+      ) {
         await this.load(current.id, true);
       } else if (code === 'TURN_CONFLICT') {
         await this.reloadTurns(current.id);
