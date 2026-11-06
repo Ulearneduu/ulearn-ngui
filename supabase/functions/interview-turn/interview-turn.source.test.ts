@@ -61,6 +61,7 @@ test('Angular interview code does not select prompts or privileged keys', () => 
   const files = [
     'src/app/interview/interview-catalog.service.ts',
     'src/app/interview/interview-session.ts',
+    'src/app/interview/interview-voice.ts',
     'src/app/interview/interview-api.ts',
     'src/app/interview/interview.ts',
   ];

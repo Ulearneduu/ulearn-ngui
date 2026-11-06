@@ -404,12 +404,48 @@ Never include provider error bodies or secrets.
 
 ---
 
+## Hybrid Voice Interview – INT-012
+
+Voice mode is an input option on the existing INT-005 session screen. It does not add an interview engine, a voice quota, or a new speech vendor contracted by ULearn.
+
+### Speech to text
+
+The browser's Web Speech API is used for speech to text: `SpeechRecognition` when present, otherwise `webkitSpeechRecognition`. The student starts and stops the microphone from the session page. Final recognized phrases are written into the existing answer box. The student can edit that text and then presses the existing Send button. Partial (interim) phrases are shown only as a "Hearing" status. They are not written as the submitted answer and they are not sent.
+
+The submitted body is the same text turn INT-005 already sends: `sessionId`, the recognized answer string, and `clientTurnId`. No audio is uploaded to Supabase or to another service by this feature. The `interview-turn` Edge Function, session ownership checks, and weekly mock quota are unchanged. Each sent answer counts as one normal interview turn.
+
+Browser speech recognition support varies by browser and device. Chrome and other Chromium browsers commonly expose the API. Safari exposes the `webkit`-prefixed API, with less consistent behavior on iPhone and iPad, where every browser uses WebKit. Firefox does not ship a working Speech Recognition API to students by default. Some embedded or forked browsers expose the constructor and then fail because they cannot reach a speech service. A secure context (`https` or `localhost`) and a user gesture are required before the browser will start the microphone.
+
+`SpeechRecognition` may rely on a browser or vendor speech service. This implementation does not guarantee that recognition stays on the device, and it does not guarantee that the browser vendor provides that service for free. No additional paid speech-to-text provider is introduced here. ULearn does not call a separate STT API and does not add an STT secret.
+
+If the API is missing, microphone permission is denied, or recognition fails (`not-allowed`, `service-not-allowed`, `audio-capture`, `no-speech`, `network`, or any other recognition error), the interview session stays open. The student sees a short message instead of a raw browser error. When voice input cannot be used, the message is: "Microphone access isn't available. You can continue your interview using text mode." Text mode keeps the current session, the draft, and the normal send path.
+
+Recognition can add a pause before words appear in the answer box. That delay depends on the browser, the device, the network, and whichever speech service the browser uses. This document does not state a measured latency. Continuous listening can also stop on its own after silence or on some mobile browsers; text already placed in the answer box remains, and the student can start recording again or switch to text.
+
+### Optional text to speech
+
+Voice mode can read the current assistant question with the browser's built-in `speechSynthesis` API. Playback starts only when the student presses "Read question aloud." Rendering the same question again does not start another reading. A new assistant question, a switch back to text mode, or the end of the session cancels speech that is already playing. If `speechSynthesis` is missing, the control is hidden and the interview continues.
+
+Speech synthesis can also add a short wait before the question is heard, depending on the browser and the selected voice. There is no separate external API cost for this TTS path, and no TTS key is added. That is separate from the OpenAI cost of generating the interview question. When the student sends recognized text, the normal AI interview-generation cost and the existing turn quota still apply. Those costs are the INT-005 text-turn costs documented above, not a charge for the microphone or for reading the question aloud.
+
+### Browser fallback
+
+| Situation | What the student can do |
+| --- | --- |
+| Browser has no Speech Recognition API | Stay in the same session and answer in text mode |
+| Microphone permission denied or no capture device | Same text-mode fallback |
+| Recognition reports no speech, a network problem, or another error | Keep the session; edit or type an answer; send as a normal turn |
+| Text-to-speech is unavailable | Interview and Send are unchanged; the read-aloud control is not shown |
+
+Text mode does not start the microphone and still submits through `interview-turn`.
+
 ## 8. Changelog
 
 | Date | Change |
 |------|--------|
 | 2026-10-24 | INT-001 complete provider, security, cost, safety, and retry specification |
 | 2026-10-24 | Verification pass: model IDs/pricing re-checked; FX updated to RBI 23-Oct-2026; cost math aligned |
+| 2026-11-06 | INT-012: browser speech recognition and optional speech synthesis on the existing text turn |
 
 ---
 
