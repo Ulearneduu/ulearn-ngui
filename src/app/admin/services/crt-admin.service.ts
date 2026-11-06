@@ -43,7 +43,27 @@ export interface CrtQuestionInput {
   difficulty?: CrtDifficulty | null;
   explanation?: string | null;
 }
+export interface CrtMockBlueprint {
+  id: string;
+  path_id: string;
+  total_minutes: number;
+  created_at: string;
+  updated_at: string;
+}
 
+export interface CrtMockBlueprintSection {
+  id: string;
+  blueprint_id: string;
+  path_id: string;
+  module_id: string;
+  question_count: number;
+  sort_order: number;
+}
+
+export interface CrtMockBlueprintConfig {
+  blueprint: CrtMockBlueprint | null;
+  sections: CrtMockBlueprintSection[];
+}
 @Injectable({
   providedIn: 'root',
 })
@@ -110,7 +130,50 @@ export class CrtAdminService {
     if (error) throw new Error(error.message);
     return (data ?? []) as CrtModule[];
   }
+  async getMockBlueprint(pathId: string): Promise<CrtMockBlueprintConfig> {
+    const { data: blueprint, error: blueprintError } = await supabase
+      .from('crt_mock_blueprints')
+      .select('*')
+      .eq('path_id', pathId)
+      .maybeSingle();
 
+    if (blueprintError) throw new Error(blueprintError.message);
+
+    if (!blueprint) {
+      return { blueprint: null, sections: [] };
+    }
+
+    const { data: sections, error: sectionsError } = await supabase
+      .from('crt_mock_blueprint_sections')
+      .select('*')
+      .eq('blueprint_id', blueprint.id)
+      .order('sort_order', { ascending: true });
+
+    if (sectionsError) throw new Error(sectionsError.message);
+
+    return {
+      blueprint: blueprint as CrtMockBlueprint,
+      sections: (sections ?? []) as CrtMockBlueprintSection[],
+    };
+  }
+
+  async saveMockBlueprint(
+    pathId: string,
+    totalMinutes: number,
+    sections: Array<{
+      module_id: string;
+      question_count: number;
+      sort_order: number;
+    }>,
+  ): Promise<void> {
+    const { error } = await supabase.rpc('crt_save_mock_blueprint', {
+      target_path: pathId,
+      target_minutes: totalMinutes,
+      target_sections: sections,
+    });
+
+    if (error) throw new Error(error.message);
+  }
   async createModule(
     pathId: string,
     title: string,

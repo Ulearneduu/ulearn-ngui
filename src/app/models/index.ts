@@ -786,3 +786,13 @@ export interface InterviewTurn {
   seq: number;
   createdAt: string;
 }
+
+/** Student history list row (INT-002 session + template title). */
+export interface InterviewHistoryItem {
+  id: string;
+  templateTitle: string;
+  status: InterviewSessionStatus;
+  startedAt: string;
+  endedAt: string | null;
+  overallScore: number | null;
+}

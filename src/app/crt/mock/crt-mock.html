@@ -1,0 +1,126 @@
+
+<div class="crt-mock-page">
+    <header class="mock-header">
+      <div>
+        <h1>Mock Test</h1>
+        <p>Answer all questions before the timer ends.</p>
+      </div>
+
+      <div class="mock-timer">
+        <span>Time Remaining</span>
+        <strong>{{ formatTime() }}</strong>
+      </div>
+    </header>
+
+    @if (isLoading()) {
+      <div class="mock-message">Loading your mock test...</div>
+    } @else if (errorMessage()) {
+      <div class="mock-error" role="alert">
+        {{ errorMessage() }}
+      </div>
+    } @else if (currentQuestion(); as question) {
+      <div class="mock-progress">
+        <span>Answered: {{ answeredCount() }} / {{ questions().length }}</span>
+        <span>Question {{ currentIndex() + 1 }} of {{ questions().length }}</span>
+      </div>
+      @if (saveErrorMessage()) {
+        <div class="mock-error" role="alert">
+          {{ saveErrorMessage() }}
+        </div>
+      }
+      <div class="mock-layout">
+        <main class="question-panel">
+          <div class="question-meta">
+            <span>{{ question.module_title }}</span>
+            @if (question.topic) {
+              <span>{{ question.topic }}</span>
+            }
+          </div>
+
+          <h2>
+            Question {{ currentIndex() + 1 }}
+          </h2>
+
+          <p class="question-text">{{ question.stem }}</p>
+
+          <div class="options-list">
+            @for (option of question.options; track $index) {
+              <button
+                type="button"
+                class="option-button"
+                [class.selected]="selectedAnswers()[question.question_id] === $index"
+                [disabled]="isSubmitting()"
+                (click)="selectAnswer($index)"
+              >
+                <span class="option-letter">
+                  {{ ['A', 'B', 'C', 'D'][$index] }}
+                </span>
+                <span>{{ option }}</span>
+              </button>
+            }
+          </div>
+
+          <div class="question-navigation">
+            <button
+              type="button"
+              (click)="previousQuestion()"
+              [disabled]="currentIndex() === 0 || isSubmitting()"
+            >
+              Previous
+            </button>
+
+            @if (currentIndex() < questions().length - 1) {
+              <button
+                type="button"
+                (click)="nextQuestion()"
+                [disabled]="isSubmitting()"
+              >
+                Next
+              </button>
+            } @else {
+              <button
+                type="button"
+                (click)="submitTest()"
+                [disabled]="isSubmitting()"
+              >
+                {{ isSubmitting() ? 'Submitting...' : 'Submit Test' }}
+              </button>
+            }
+          </div>
+        </main>
+
+        <aside class="question-sidebar">
+          <h3>Question Navigator</h3>
+          <p>Select a question to visit it.</p>
+
+          <div class="question-grid">
+            @for (item of questions(); track item.question_id; let i = $index) {
+              <button
+                type="button"
+                [class.active]="currentIndex() === i"
+                [class.answered]="isAnswered(item.question_id)"
+                [disabled]="isSubmitting()"
+                (click)="goToQuestion(i)"
+              >
+                {{ i + 1 }}
+              </button>
+            }
+          </div>
+
+          <div class="navigator-legend">
+            <span><i class="legend-answered"></i> Answered</span>
+            <span><i class="legend-unanswered"></i> Not answered</span>
+          </div>
+
+          <button
+            type="button"
+            class="submit-button"
+            (click)="submitTest()"
+            [disabled]="isSubmitting()"
+          >
+            {{ isSubmitting() ? 'Submitting...' : 'Submit Mock Test' }}
+          </button>
+        </aside>
+      </div>
+    }
+  </div>

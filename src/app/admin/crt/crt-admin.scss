@@ -403,3 +403,40 @@ tr:last-child td {
     gap: 2px;
   }
 }
+
+.question-import {
+  margin: 8px 0 20px;
+  padding: 16px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.question-import h2 {
+  margin: 0 0 8px;
+  color: var(--navy);
+  font-size: 1.05rem;
+}
+
+.question-import p {
+  margin: 0 0 12px;
+  color: var(--muted);
+}
+
+.import-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.question-import input[type='file'] {
+  display: block;
+  margin-top: 6px;
+}
+
+.question-import .btn-add:disabled,
+.question-import .btn-text:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}

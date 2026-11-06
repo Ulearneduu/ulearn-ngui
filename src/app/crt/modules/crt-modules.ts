@@ -116,4 +116,8 @@ export class CrtModules implements OnInit {
   practiceLink(moduleId: string): string[] {
     return ['/crt/paths', this.pathId, 'modules', moduleId, 'practice'];
   }
+
+  mockLink(): string[] {
+    return ['/crt/mock', this.pathId];
+  }
 }

@@ -18,9 +18,8 @@ import { CrtShell } from '../crt-shell/crt-shell';
 import {
   CrtAdminService,
   CrtPath,
-  CrtModule
+  CrtModule,
 } from '../../services/crt-admin.service';
-
 @Component({
   selector: 'app-crt-path-modules',
   standalone: true,
@@ -42,6 +41,9 @@ export class CrtPathModules implements OnInit {
   readonly path = signal<CrtPath | null>(null);
   readonly modules = signal<CrtModule[]>([]);
   readonly query = signal('');
+  readonly mockTotalMinutes = signal(60);
+  readonly mockQuestionCounts = signal<Record<string, number>>({});
+  readonly isMockSaving = signal(false);
   readonly showForm = signal(false);
   readonly editingId = signal<string | null>(null);
 
@@ -88,13 +90,23 @@ export class CrtPathModules implements OnInit {
     this.isLoading.set(true);
 
     try {
-      const [paths, modules] = await Promise.all([
+      const [paths, modules, mockConfig] = await Promise.all([
         this.crtService.listPaths(),
-        this.crtService.listModules(pathId)
+        this.crtService.listModules(pathId),
+        this.crtService.getMockBlueprint(pathId)
       ]);
 
       this.path.set(paths.find(item => item.id === pathId) ?? null);
       this.modules.set(modules);
+      this.mockTotalMinutes.set(mockConfig.blueprint?.total_minutes ?? 60);
+
+const questionCounts: Record<string, number> = {};
+
+for (const section of mockConfig.sections) {
+  questionCounts[section.module_id] = section.question_count;
+}
+
+this.mockQuestionCounts.set(questionCounts);
     } catch (error) {
       console.error('Failed to load CRT modules:', error);
       this.toast.error(
@@ -251,7 +263,69 @@ export class CrtPathModules implements OnInit {
       this.isSaving.set(false);
     }
   }
+  async saveMockConfiguration(): Promise<void> {
+    const pathId = this.pathId();
 
+    if (!pathId || this.modules().length === 0) {
+      this.toast.error('Add at least one module before configuring a mock test.');
+      return;
+    }
+
+    const sections = this.pathModules()
+      .filter(module => (this.mockQuestionCounts()[module.id] ?? 0) > 0)
+      .map(module => ({
+        module_id: module.id,
+        question_count: this.mockQuestionCounts()[module.id],
+        sort_order: module.sort_order
+      }));
+
+    if (sections.length === 0) {
+      this.toast.error('Configure at least one section with questions.');
+      return;
+    }
+
+    if (
+      !Number.isInteger(this.mockTotalMinutes()) ||
+      this.mockTotalMinutes() < 1 ||
+      this.mockTotalMinutes() > 300
+    ) {
+      this.toast.error('Mock duration must be between 1 and 300 minutes.');
+      return;
+    }
+
+    this.isMockSaving.set(true);
+
+    try {
+      await this.crtService.saveMockBlueprint(
+        pathId,
+        this.mockTotalMinutes(),
+        sections
+      );
+
+      this.toast.success('Mock test configuration saved.');
+      await this.loadData(pathId);
+    } catch (error) {
+      console.error('Failed to save mock configuration:', error);
+      this.toast.error(
+        error instanceof Error ? error.message : 'Unable to save mock configuration.'
+      );
+    } finally {
+      this.isMockSaving.set(false);
+    }
+  }
+  onMockDurationChange(event: Event): void {
+    const value = Number((event.target as HTMLInputElement).value);
+    this.mockTotalMinutes.set(Number.isFinite(value) ? value : 0);
+  }
+
+  onMockQuestionCountChange(moduleId: string, event: Event): void {
+    const value = Number((event.target as HTMLInputElement).value);
+
+    this.mockQuestionCounts.update(current => ({
+      ...current,
+      [moduleId]: Number.isFinite(value) ? value : 0
+    }));
+  }
   private revealForm(): void {
     this.showForm.set(true);
 

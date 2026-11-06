@@ -1,0 +1,164 @@
+
+:host {
+    display: block;
+  }
+
+  .mock-result-page {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 24px;
+    color: #1e293b;
+  }
+
+  .result-header {
+    margin-bottom: 28px;
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 28px;
+      font-weight: 700;
+    }
+
+    p {
+      margin: 0;
+      color: #64748b;
+    }
+  }
+
+  .overall-result {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    padding: 28px;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    background: #f8fafc;
+
+    h2 {
+      margin: 10px 0 0;
+      font-size: 34px;
+    }
+  }
+
+  .result-label {
+    color: #64748b;
+    font-size: 14px;
+  }
+
+  .percentage-circle {
+    display: flex;
+    width: 112px;
+    height: 112px;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    border: 6px solid #2563eb;
+    border-radius: 50%;
+    background: #ffffff;
+
+    strong {
+      font-size: 25px;
+      color: #1d4ed8;
+    }
+
+    span {
+      margin-top: 3px;
+      color: #64748b;
+      font-size: 11px;
+    }
+  }
+
+  .section-results {
+    margin-top: 32px;
+
+    > h2 {
+      margin-bottom: 18px;
+      font-size: 21px;
+    }
+  }
+
+  .section-card {
+    margin-bottom: 16px;
+    padding: 20px;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    background: #ffffff;
+
+    p {
+      margin: 10px 0 0;
+      color: #64748b;
+      font-size: 13px;
+    }
+  }
+
+  .section-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 14px;
+
+    h3 {
+      margin: 0;
+      font-size: 17px;
+    }
+
+    strong {
+      color: #1d4ed8;
+      white-space: nowrap;
+    }
+  }
+
+  .score-track {
+    height: 10px;
+    overflow: hidden;
+    border-radius: 20px;
+    background: #e2e8f0;
+  }
+
+  .score-fill {
+    height: 100%;
+    border-radius: inherit;
+    background: #2563eb;
+    transition: width 0.3s ease;
+  }
+
+  .back-link {
+    display: inline-block;
+    margin-top: 24px;
+    padding: 12px 20px;
+    border-radius: 8px;
+    background: #2563eb;
+    color: #ffffff;
+    text-decoration: none;
+    font-weight: 600;
+  }
+
+  .result-message,
+  .result-error {
+    padding: 20px;
+    border-radius: 10px;
+    background: #f8fafc;
+  }
+
+  .result-error {
+    background: #fef2f2;
+    color: #b91c1c;
+  }
+
+  @media (max-width: 520px) {
+    .mock-result-page {
+      padding: 14px;
+    }
+
+    .overall-result {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+
+    .section-info {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+  }

@@ -129,6 +129,7 @@ Deno.serve(async (req) => {
       const aiConfig = readAiConfig();
       if (!aiConfig.ok) {
         await markClaimFailed(writer, session.id, clientTurnId, reserved.claimedAt);
+        await markSessionFailed(writer, session.id);
         console.error(JSON.stringify({
           source: 'interview-turn',
           code: 'AI_NOT_CONFIGURED',
@@ -152,6 +153,7 @@ Deno.serve(async (req) => {
       });
       if (!reply.ok) {
         await markClaimFailed(writer, session.id, clientTurnId, reserved.claimedAt);
+        await markSessionFailed(writer, session.id);
         return fail(
           reply.httpStatus,
           reply.code,
@@ -400,6 +402,23 @@ async function noteAssistantText(
     .select('client_turn_id')
     .maybeSingle();
   return !error && !!data;
+}
+
+/** Ends an in-progress session after the AI cannot reply. Saved turns are left in place. */
+async function markSessionFailed(writer: SupabaseClient, sessionId: string): Promise<void> {
+  const { error } = await writer
+    .from('interview_sessions')
+    .update({ status: 'failed', ended_at: new Date().toISOString() })
+    .eq('id', sessionId)
+    .eq('status', 'in_progress');
+  if (error) {
+    console.error(JSON.stringify({
+      source: 'interview-turn',
+      code: 'FAIL_SESSION_UPDATE_FAILED',
+      dbCode: error.code ?? null,
+      sessionId,
+    }));
+  }
 }
 
 async function markClaimFailed(

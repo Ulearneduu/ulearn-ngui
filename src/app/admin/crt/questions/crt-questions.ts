@@ -24,6 +24,8 @@ import {
   CrtQuestionInput
 } from '../../services/crt-admin.service';
 import { CrtShell } from '../crt-shell/crt-shell';
+import { CrtQuestionBulkImportService } from '../../services/crt-question-bulk-import.service';
+import { QuestionImportRowResult } from '../../services/crt-question-bulk-import.util';
 
 type CrtAnswer = 'A' | 'B' | 'C' | 'D';
 
@@ -66,6 +68,7 @@ export class CrtQuestions implements OnInit {
   private readonly confirmDialog = inject(ConfirmDialogService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly crtService = inject(CrtAdminService);
+  private readonly bulkImport = inject(CrtQuestionBulkImportService);
 
   readonly answers: CrtAnswer[] = ANSWERS;
   readonly difficulties: { id: CrtDifficulty; label: string }[] = [
@@ -87,6 +90,10 @@ export class CrtQuestions implements OnInit {
   readonly showForm = signal(false);
   readonly editingId = signal<string | null>(null);
   readonly previewId = signal<string | null>(null);
+  readonly bulkFile = signal<File | null>(null);
+  readonly bulkImporting = signal(false);
+  readonly bulkFileError = signal('');
+  readonly bulkResults = signal<QuestionImportRowResult[] | null>(null);
   private readonly formHost = viewChild<ElementRef<HTMLElement>>('formHost');
   private readonly previewHost = viewChild<ElementRef<HTMLElement>>('previewHost');
 
@@ -136,6 +143,10 @@ export class CrtQuestions implements OnInit {
       : 'That module was not found.';
   });
 
+  readonly importedCount = computed(() => this.bulkResults()?.filter((row) => row.success).length ?? 0);
+  readonly skippedCount = computed(() => this.bulkResults()?.filter((row) => row.skipped).length ?? 0);
+  readonly failedCount = computed(() => this.bulkResults()?.filter((row) => !row.success && !row.skipped).length ?? 0);
+
   readonly visibleQuestions = computed(() => {
     const query = this.query().trim().toLowerCase();
     const moduleId = this.moduleFilter();
@@ -160,9 +171,11 @@ export class CrtQuestions implements OnInit {
     void this.loadQuestions();
   }
 
-  async loadQuestions(): Promise<void> {
-    this.isLoading.set(true);
-    this.loadError.set('');
+  async loadQuestions(options?: { silent?: boolean }): Promise<void> {
+    if (!options?.silent) {
+      this.isLoading.set(true);
+      this.loadError.set('');
+    }
 
     try {
       const [paths, modules, questions] = await Promise.all([
@@ -176,15 +189,72 @@ export class CrtQuestions implements OnInit {
     } catch (error) {
       console.error('Failed to load CRT questions:', error);
       const message = error instanceof Error ? error.message : 'Unable to load questions.';
-      this.loadError.set(message);
-      this.toast.error(message);
+      if (options?.silent) {
+        this.toast.error(message);
+      } else {
+        this.loadError.set(message);
+        this.toast.error(message);
+      }
     } finally {
-      this.isLoading.set(false);
+      if (!options?.silent) this.isLoading.set(false);
     }
   }
 
   onSearch(event: Event): void {
     this.query.set((event.target as HTMLInputElement).value);
+  }
+
+  downloadExcelTemplate(): void {
+    this.bulkImport.downloadExcelTemplate();
+  }
+
+  downloadCsvTemplate(): void {
+    this.bulkImport.downloadCsvTemplate();
+  }
+
+  onImportFile(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0] ?? null;
+    input.value = '';
+    this.bulkResults.set(null);
+    this.bulkFileError.set('');
+    if (!file) {
+      this.bulkFile.set(null);
+      return;
+    }
+    const extension = file.name.split('.').pop()?.toLowerCase();
+    if (extension !== 'csv' && extension !== 'xlsx') {
+      this.bulkFile.set(null);
+      this.bulkFileError.set('Choose a .csv or .xlsx file.');
+      return;
+    }
+    this.bulkFile.set(file);
+  }
+
+  async importQuestions(): Promise<void> {
+    const file = this.bulkFile();
+    if (!file || this.bulkImporting()) return;
+
+    this.bulkImporting.set(true);
+    this.bulkFileError.set('');
+    this.bulkResults.set(null);
+    try {
+      const results = await this.bulkImport.importFile(file);
+      this.bulkResults.set(results);
+      const imported = results.filter((row) => row.success).length;
+      const failed = results.filter((row) => !row.success && !row.skipped).length;
+      if (imported > 0) {
+        this.toast.success(`Imported ${imported} question${imported === 1 ? '' : 's'}.`);
+        await this.loadQuestions({ silent: true });
+      }
+      if (failed > 0) {
+        this.toast.error(`${failed} row${failed === 1 ? '' : 's'} could not be imported.`);
+      }
+    } catch (error) {
+      this.bulkFileError.set(error instanceof Error ? error.message : 'The import could not be completed.');
+    } finally {
+      this.bulkImporting.set(false);
+    }
   }
 
   setTopicFilter(topic: string): void {

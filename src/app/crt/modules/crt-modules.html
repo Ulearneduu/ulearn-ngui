@@ -15,6 +15,12 @@
   } @else if (modules().length === 0) {
     <p class="status">No modules available in this path yet.</p>
   } @else {
+    <div style="margin-top: 24px;">
+      <a class="btn-primary" [routerLink]="mockLink()">
+        Start Mock Test
+      </a>
+    </div>
+
     <ol class="module-list">
       @for (module of modules(); track module.id) {
         <li class="module-card">

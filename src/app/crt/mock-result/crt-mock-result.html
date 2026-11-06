@@ -1,0 +1,66 @@
+
+<div class="mock-result-page">
+    <header class="result-header">
+      <h1>Mock Test Results</h1>
+      <p>Your mock test has been submitted successfully.</p>
+    </header>
+
+    @if (isLoading()) {
+      <div class="result-message">Loading your results...</div>
+    } @else if (errorMessage()) {
+      <div class="result-error" role="alert">
+        {{ errorMessage() }}
+      </div>
+    } @else {
+      <section class="overall-result">
+        <div>
+          <span class="result-label">Overall Score</span>
+          <h2>{{ totalScore() }} / {{ totalQuestions() }}</h2>
+        </div>
+
+        <div class="percentage-circle">
+          <strong>{{ percentage() }}%</strong>
+          <span>Percentage</span>
+        </div>
+      </section>
+
+      <section class="section-results">
+        <h2>Section-wise Performance</h2>
+
+        @for (section of sections(); track section.module_id) {
+          <article class="section-card">
+            <div class="section-info">
+              <h3>{{ section.module_title }}</h3>
+              <strong>
+                {{ section.section_score }} /
+                {{ section.section_max_score }}
+              </strong>
+            </div>
+
+            <div class="score-track">
+              <div
+                class="score-fill"
+                [style.width.%]="section.section_max_score > 0
+                  ? (section.section_score / section.section_max_score) * 100
+                  : 0"
+              ></div>
+            </div>
+
+            <p>
+              {{
+                section.section_max_score > 0
+                  ? ((section.section_score / section.section_max_score) * 100 | number:'1.0-0')
+                  : 0
+              }}% score
+            </p>
+          </article>
+        } @empty {
+          <p>No section results are available.</p>
+        }
+      </section>
+
+      <a class="back-link" routerLink="/crt">
+        Back to CRT Home
+      </a>
+    }
+  </div>

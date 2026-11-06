@@ -57,6 +57,66 @@
       <button type="button" class="btn-add" (click)="openCreate()">+ Add Question</button>
     </div>
 
+    <section class="question-import" aria-labelledby="question-import-title">
+      <h2 id="question-import-title">Bulk import</h2>
+      <p>
+        Upload a CSV or Excel file. Delete the sample row first. Each remaining row is checked on its own, and one failure does not stop the others.
+      </p>
+      <div class="import-actions">
+        <button type="button" class="btn-text" (click)="downloadExcelTemplate()" [disabled]="bulkImporting()">
+          Download Excel template
+        </button>
+        <button type="button" class="btn-text" (click)="downloadCsvTemplate()" [disabled]="bulkImporting()">
+          Download CSV template
+        </button>
+      </div>
+      <div class="form-group">
+        <label for="question-import-file">Question file</label>
+        <input
+          id="question-import-file"
+          type="file"
+          accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+          [disabled]="bulkImporting()"
+          (change)="onImportFile($event)"
+        />
+        <p role="status">{{ bulkFile() ? bulkFile()!.name : 'No file selected.' }}</p>
+      </div>
+      <button type="button" class="btn-add" [disabled]="!bulkFile() || bulkImporting()" (click)="importQuestions()">
+        {{ bulkImporting() ? 'Importing...' : 'Import questions' }}
+      </button>
+      @if (bulkFileError()) {
+        <p class="field-error" role="alert">{{ bulkFileError() }}</p>
+      }
+      @if (bulkResults(); as results) {
+        <p role="status">
+          Processed {{ results.length }}. Successful {{ importedCount() }}. Skipped {{ skippedCount() }}. Failed {{ failedCount() }}.
+        </p>
+        <div class="table-wrap">
+          <table>
+            <caption class="visually-hidden">Question import results</caption>
+            <thead>
+              <tr>
+                <th>Row</th>
+                <th>Question</th>
+                <th>Result</th>
+                <th>Details</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of results; track row.rowNumber) {
+                <tr>
+                  <td>{{ row.rowNumber || 'File' }}</td>
+                  <td>{{ row.stem }}</td>
+                  <td>{{ row.skipped ? 'Skipped' : (row.success ? 'Success' : 'Failed') }}</td>
+                  <td>{{ row.message }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    </section>
+
     @if (moduleFilterError()) {
       <div class="state error" role="alert">
         <p>{{ moduleFilterError() }}</p>

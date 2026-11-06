@@ -106,6 +106,22 @@ export const routes: Routes = [
     loadComponent: () => import('./crt/result/crt-result').then(m => m.CrtResult)
   },
   {
+    path: 'crt/mock/:pathId/attempts/:attemptId/result',
+    canActivate: [authGuard, blockExamOnlyGuard, featurePermissionGuard],
+    data: { permission: 'crt.access' },
+    loadComponent: () =>
+      import('./crt/mock-result/crt-mock-result').then(
+        (m) => m.CrtMockResultComponent
+      )
+  },
+  {
+    path: 'crt/mock/:pathId',
+    canActivate: [authGuard, blockExamOnlyGuard, featurePermissionGuard],
+    data: { permission: 'crt.access' },
+    loadComponent: () =>
+      import('./crt/mock/crt-mock').then((m) => m.CrtMockComponent)
+  },
+  {
     path: 'crt/history',
     canActivate: [authGuard, blockExamOnlyGuard, featurePermissionGuard],
     data: { permission: 'crt.access' },
@@ -125,6 +141,16 @@ export const routes: Routes = [
       {
         path: '',
         loadComponent: () => import('./interview/interview').then(m => m.Interview)
+      },
+      {
+        path: 'history',
+        loadComponent: () =>
+          import('./interview/interview-history').then(m => m.InterviewHistory)
+      },
+      {
+        path: 'session/:id/feedback',
+        loadComponent: () =>
+          import('./interview/interview-session-feedback').then(m => m.InterviewSessionFeedback)
       },
       {
         path: 'session/:id',
