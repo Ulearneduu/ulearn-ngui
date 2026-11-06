@@ -114,6 +114,21 @@ export function recognizedAnswerText(draft: string): string {
   return draft.trim();
 }
 
+/** Recording may start only while voice mode is idle of reconnect, send, end, and expiry. */
+export function recognitionMayStart(state: {
+  mode: InterviewInputMode;
+  reconnecting: boolean;
+  sending: boolean;
+  ending: boolean;
+  expiring: boolean;
+}): boolean {
+  return state.mode === 'voice'
+    && !state.reconnecting
+    && !state.sending
+    && !state.ending
+    && !state.expiring;
+}
+
 export function getRecognitionConstructor(host: SpeechHost): SpeechRecognitionConstructor | null {
   const ctor = host.SpeechRecognition ?? host.webkitSpeechRecognition;
   return typeof ctor === 'function' ? ctor : null;

@@ -32,6 +32,7 @@ import {
   VOICE_UNAVAILABLE_MESSAGE,
   browserSpeechHost,
   createQuestionSpeaker,
+  recognitionMayStart,
   recognizedAnswerText,
 } from './interview-voice';
 
@@ -884,7 +885,13 @@ export class InterviewSession {
   }
 
   toggleRecording(): void {
-    if (this.inputMode() !== 'voice' || this.sending() || this.reconnecting() || this.ending() || this.expiring()) return;
+    if (!recognitionMayStart({
+      mode: this.inputMode(),
+      reconnecting: this.reconnecting(),
+      sending: this.sending(),
+      ending: this.ending(),
+      expiring: this.expiring(),
+    })) return;
     if (this.recording()) {
       this.voice.stop();
       return;
@@ -927,6 +934,7 @@ export class InterviewSession {
     this.reconnecting.set(true);
     this.confirmOpen.set(false);
     this.voice.abandon();
+    this.speaker.cancel();
     try {
       await this.load(current.id, true);
       if (!this.error()) {

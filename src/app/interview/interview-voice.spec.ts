@@ -11,8 +11,10 @@ import {
   VOICE_NO_SPEECH_MESSAGE,
   VOICE_UNAVAILABLE_MESSAGE,
   appendRecognizedAnswer,
+  recognitionMayStart,
   recognizedAnswerText,
 } from './interview-voice.ts';
+import { shouldAutoFinishSession } from './interview-timer.ts';
 import type {
   BrowserSpeechRecognition,
   InterviewVoiceHandlers,
@@ -400,10 +402,115 @@ test('question playback does not submit and does not repeat from question notifi
   assert.equal(submits, 0);
 
   speaker.cancel();
+  assert.equal(synth.speaking, false);
+  assert.equal(speaking, false);
   const silent = new QuestionSpeaker(null, (text) => ({ text, lang: '', onend: null, onerror: null }));
   assert.equal(silent.supported, false);
   assert.equal(silent.speak('question-3', 'Hello'), false);
   silent.noteQuestion('question-3');
   silent.cancel();
   assert.equal(submits, 0);
+});
+
+test('reconnect stops recognition and speech and does not resume on its own', () => {
+  const harness = setup();
+  const spoken: string[] = [];
+  let speaking = false;
+  const synth = {
+    speaking: false,
+    speak(utterance: SpeechUtteranceLike) {
+      this.speaking = true;
+      spoken.push(utterance.text);
+    },
+    cancel() {
+      this.speaking = false;
+    },
+  };
+  const speaker = new QuestionSpeaker(synth, (text) => ({
+    text,
+    lang: '',
+    onend: null,
+    onerror: null,
+  }), (value) => {
+    speaking = value;
+  });
+
+  harness.voice.setMode('voice');
+  harness.voice.start();
+  assert.equal(speaker.speak('question-1', 'Tell me about a challenge.'), true);
+  assert.equal(harness.recording, true);
+  assert.equal(speaking, true);
+
+  const reconnecting = true;
+  assert.equal(recognitionMayStart({
+    mode: 'voice',
+    reconnecting,
+    sending: false,
+    ending: false,
+    expiring: false,
+  }), false);
+  harness.voice.abandon();
+  speaker.cancel();
+
+  assert.equal(harness.recording, false);
+  assert.equal(harness.recognition.aborted, 1);
+  assert.equal(speaking, false);
+  assert.equal(synth.speaking, false);
+  harness.recognition.emit([{ text: 'late phrase', isFinal: true }]);
+  assert.equal(harness.draft, '');
+  assert.equal(harness.voice.isRecording(), false);
+  assert.equal(harness.constructed, 1);
+
+  assert.equal(recognitionMayStart({
+    mode: 'voice',
+    reconnecting: false,
+    sending: false,
+    ending: false,
+    expiring: false,
+  }), true);
+});
+
+test('timer expiry stops recognition and speech before another answer can be sent', () => {
+  const harness = setup();
+  const synth = {
+    speaking: false,
+    speak() {
+      this.speaking = true;
+    },
+    cancel() {
+      this.speaking = false;
+    },
+  };
+  let speaking = false;
+  const speaker = new QuestionSpeaker(synth, (text) => ({
+    text,
+    lang: '',
+    onend: null,
+    onerror: null,
+  }), (value) => {
+    speaking = value;
+  });
+
+  harness.voice.setMode('voice');
+  harness.voice.start();
+  speaker.speak('question-1', 'What did you do next?');
+  harness.draft = 'I was still speaking.';
+  assert.equal(shouldAutoFinishSession('in_progress', 0), true);
+
+  harness.voice.abandon();
+  speaker.cancel();
+
+  assert.equal(harness.recording, false);
+  assert.equal(harness.recognition.aborted, 1);
+  assert.equal(speaking, false);
+  assert.equal(recognitionMayStart({
+    mode: 'voice',
+    reconnecting: false,
+    sending: false,
+    ending: false,
+    expiring: true,
+  }), false);
+  harness.recognition.emit([{ text: 'after the timer', isFinal: true }]);
+  assert.equal(harness.draft, 'I was still speaking.');
+  assert.equal(harness.sends.length, 0);
 });
