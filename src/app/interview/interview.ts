@@ -2,6 +2,13 @@ import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } 
 import { Router, RouterLink, RouterLinkActive } from '@angular/router';
 import { InterviewTemplate, InterviewTemplateKind } from '../models';
 import { InterviewCatalogService, interviewErrorMessage } from './interview-catalog.service';
+import {
+  RESUME_TEXT_MAX,
+  extractResumeFile,
+  resumeLimitMessage,
+  resumeTextForSession,
+  validateResumeFile,
+} from './interview-resume';
 import { InterviewQuota, InterviewService } from './interview.service';
 
 interface CatalogGroup {
@@ -60,6 +67,50 @@ const KIND_ORDER: readonly InterviewTemplateKind[] = ['hr', 'technical', 'domain
         </section>
       }
 
+      <section class="resume-card" aria-labelledby="resume-heading">
+        <h2 id="resume-heading">Resume (Optional)</h2>
+        <p class="meta">Paste your resume or upload a PDF, DOCX, or TXT file. You can edit the text before you start.</p>
+        <label class="field-label" for="resume-text">Resume (Optional)</label>
+        <textarea
+          id="resume-text"
+          rows="8"
+          placeholder="Paste resume text. Include projects, technologies, responsibilities, and achievements you want the interviewer to ask about."
+          [value]="resumeText()"
+          (input)="onResumeInput($event)"
+        ></textarea>
+        <p class="counter" [class.over]="resumeOverLimit()">{{ resumeText().length }} / {{ resumeMax }}</p>
+        @if (extracting()) {
+          <p class="status" role="status">Extracting resume text…</p>
+        }
+        @if (resumeError()) {
+          <p class="resume-error" role="alert">{{ resumeError() }}</p>
+        }
+        @if (resumeFileName()) {
+          <p class="meta">Loaded from {{ resumeFileName() }}. You can edit the extracted text before starting.</p>
+        }
+        <div class="resume-actions">
+          <label class="btn-outline file-label">
+            {{ extracting() ? 'Extracting…' : 'Upload PDF, DOCX, or TXT' }}
+            <input
+              #resumeFile
+              type="file"
+              accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
+              [disabled]="extracting()"
+              (change)="onResumeFile($event)"
+            />
+          </label>
+          @if (resumeText() || resumeFileName()) {
+            <button type="button" class="btn-outline" (click)="clearResume(resumeFile)">Remove resume</button>
+          }
+        </div>
+        <p class="privacy">
+          Providing a resume is optional. Resume information is used to personalize the mock interview.
+          Resume information is associated with the interview session. Students should avoid submitting
+          unnecessary sensitive personal information. Resume information is handled according to the
+          documented retention policy.
+        </p>
+      </section>
+
       <nav class="interview-tabs" aria-label="Interview sections">
         <a routerLink="/interview" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">
           Catalog
@@ -96,7 +147,7 @@ const KIND_ORDER: readonly InterviewTemplateKind[] = ['hr', 'technical', 'domain
                   <button
                     type="button"
                     class="btn-primary"
-                    [disabled]="startingId() !== null || quotaExhausted()"
+                    [disabled]="startingId() !== null || quotaExhausted() || extracting() || resumeOverLimit()"
                     (click)="start(template)"
                   >
                     {{ startingId() === template.id ? 'Starting…' : 'Start' }}
@@ -225,6 +276,85 @@ const KIND_ORDER: readonly InterviewTemplateKind[] = ['hr', 'technical', 'domain
       color: var(--navy);
       border: 1px solid #f3c2c2;
     }
+    .resume-card {
+      margin-top: 24px;
+      padding: 24px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--card);
+    }
+    .resume-card h2,
+    .field-label {
+      margin: 0 0 8px;
+      color: var(--navy);
+      font-size: 1.125rem;
+    }
+    .field-label {
+      display: block;
+      margin-top: 16px;
+      font-size: 0.9375rem;
+      font-weight: 700;
+    }
+    .resume-card textarea {
+      width: 100%;
+      min-height: 160px;
+      padding: 12px 14px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      resize: vertical;
+      font: inherit;
+      color: var(--navy);
+      background: #fff;
+    }
+    .counter {
+      margin: 8px 0 0;
+      color: var(--muted);
+      font-size: 0.875rem;
+    }
+    .counter.over,
+    .resume-error {
+      color: #9b1c1c;
+    }
+    .resume-error {
+      margin: 8px 0 0;
+      font-weight: 700;
+    }
+    .resume-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .file-label {
+      display: inline-flex;
+      align-items: center;
+    }
+    .file-label input {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      border: 0;
+    }
+    .privacy {
+      margin: 16px 0 0;
+      color: var(--muted);
+      font-size: 0.875rem;
+    }
+    @media (max-width: 640px) {
+      .interview-page {
+        padding: 32px 16px 56px;
+      }
+      .resume-actions .btn-outline,
+      .file-label {
+        width: 100%;
+        justify-content: center;
+        text-align: center;
+      }
+    }
   `,
 })
 export class Interview implements OnInit {
@@ -240,6 +370,13 @@ export class Interview implements OnInit {
   readonly quotaLoading = signal(true);
   readonly quotaError = signal<string | null>(null);
   readonly quota = signal<InterviewQuota | null>(null);
+  readonly resumeText = signal('');
+  readonly resumeError = signal<string | null>(null);
+  readonly resumeFileName = signal<string | null>(null);
+  readonly extracting = signal(false);
+  readonly resumeMax = RESUME_TEXT_MAX;
+
+  readonly resumeOverLimit = computed(() => resumeLimitMessage(this.resumeText()) !== null);
 
   readonly quotaExhausted = computed(() => {
     const current = this.quota();
@@ -299,12 +436,66 @@ export class Interview implements OnInit {
     }
   }
 
+  onResumeInput(event: Event): void {
+    const value = event.target instanceof HTMLTextAreaElement ? event.target.value : '';
+    this.resumeText.set(value);
+    this.resumeError.set(resumeLimitMessage(value));
+  }
+
+  async onResumeFile(event: Event): Promise<void> {
+    const input = event.target instanceof HTMLInputElement ? event.target : null;
+    const file = input?.files?.[0];
+    if (!file) return;
+    const valid = validateResumeFile(file);
+    if (!valid.ok) {
+      this.resumeError.set(valid.error);
+      if (input) input.value = '';
+      return;
+    }
+    this.extracting.set(true);
+    this.resumeError.set(null);
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const extracted = await extractResumeFile({
+        name: file.name,
+        type: file.type,
+        size: file.size,
+        bytes,
+      });
+      if (!extracted.ok) {
+        this.resumeError.set(extracted.error);
+        return;
+      }
+      this.resumeText.set(extracted.text);
+      this.resumeFileName.set(file.name);
+      this.resumeError.set(resumeLimitMessage(extracted.text));
+    } catch {
+      this.resumeError.set('The resume text could not be read from that file.');
+    } finally {
+      this.extracting.set(false);
+      if (input) input.value = '';
+    }
+  }
+
+  clearResume(input?: HTMLInputElement): void {
+    this.resumeText.set('');
+    this.resumeError.set(null);
+    this.resumeFileName.set(null);
+    if (input) input.value = '';
+  }
+
   async start(template: InterviewTemplate): Promise<void> {
-    if (this.startingId() || this.quotaExhausted()) return;
+    if (this.startingId() || this.quotaExhausted() || this.extracting()) return;
+    const resume = resumeTextForSession(this.resumeText());
+    if (resume.error) {
+      this.resumeError.set(resume.error);
+      this.startError.set(resume.error);
+      return;
+    }
     this.startingId.set(template.id);
     this.startError.set(null);
     try {
-      const sessionId = await this.catalog.startSession(template);
+      const sessionId = await this.catalog.startSession(template, resume.text);
       const opened = await this.router.navigate(['/interview/session', sessionId]);
       if (!opened) {
         this.startError.set('The interview started, but the session page could not be opened.');

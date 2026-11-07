@@ -213,7 +213,7 @@ export class InterviewCatalogService {
    * Pins prompt_version + template_version_id to the template's current snapshot.
    * Returns the new session id.
    */
-  async startSession(template: InterviewTemplate): Promise<string> {
+  async startSession(template: InterviewTemplate, resumeText?: string | null): Promise<string> {
     const { data: userData, error: userError } = await supabase.auth.getUser();
     if (userError) throw userError;
     const userId = userData.user?.id;
@@ -226,15 +226,26 @@ export class InterviewCatalogService {
       throw new Error('This interview is not available right now.');
     }
 
+    const row: {
+      user_id: string;
+      template_id: string;
+      status: 'in_progress';
+      prompt_version: string;
+      template_version_id: string;
+      resume_text?: string;
+    } = {
+      user_id: userId,
+      template_id: template.id,
+      status: 'in_progress',
+      prompt_version: formatTemplateVersionNumber(version.version),
+      template_version_id: version.id,
+    };
+    const resume = typeof resumeText === 'string' ? resumeText.trim() : '';
+    if (resume) row.resume_text = resume;
+
     const { data, error } = await supabase
       .from('interview_sessions')
-      .insert({
-        user_id: userId,
-        template_id: template.id,
-        status: 'in_progress',
-        prompt_version: formatTemplateVersionNumber(version.version),
-        template_version_id: version.id,
-      })
+      .insert(row)
       .select('id')
       .single();
 
@@ -508,7 +519,7 @@ export class InterviewCatalogService {
    * Mark the signed-in student's session completed at the database clock.
    * A second call succeeds without changing the original ended_at.
    */
-  async completeOwnSession(sessionId: string): Promise<InterviewSessionSummary> {
+  async completeOwnSession(sessionId: string): Promise<InterviewSessionDetails> {
     const result = await this.finishOwnSession(sessionId, 'manual');
     if (result.session?.status !== 'completed') {
       throw new Error('This interview could not be ended. Please try again.');
@@ -564,7 +575,7 @@ export class InterviewCatalogService {
 }
 
 export interface InterviewFinishResult {
-  session: InterviewSessionSummary | null;
+  session: InterviewSessionDetails | null;
   status: InterviewSessionStatus | null;
   timeUp: boolean;
   serverNow: string | null;

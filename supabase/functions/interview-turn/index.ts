@@ -20,6 +20,14 @@ import {
   parseTemplateVersionNumber,
   pickTemplateFacts,
 } from '../_shared/interview-template-version.ts';
+import {
+  judgeResumeQuestion,
+  prepareResumeSummary,
+  readResumeColumns,
+  resolveResumeAwareReply,
+  resumeSystemAddendum,
+  type AskedResumeQuestion,
+} from '../_shared/interview-resume.ts';
 
 /**
  * interview-turn
@@ -79,7 +87,7 @@ Deno.serve(async (req) => {
 
     const sessionResult = await userClient
       .from('interview_sessions')
-      .select('id, user_id, status, template_id, prompt_version, template_version_id, started_at')
+      .select('id, user_id, status, template_id, prompt_version, template_version_id, started_at, resume_text, resume_summary, resume_question_log')
       .eq('id', sessionId)
       .maybeSingle();
     if (sessionResult.error) return fail(500, 'SESSION_LOAD_FAILED', 'Could not open this interview.', sessionId);
@@ -129,6 +137,17 @@ Deno.serve(async (req) => {
 
     let assistantText = reserved.assistantText;
     let mode = already.type;
+    const resumeColumns = readResumeColumns(sessionResult.data);
+    let resumeSummary = resumeColumns.summary ?? (resumeColumns.text ? prepareResumeSummary(resumeColumns.text) : null);
+    if (resumeColumns.text && !resumeColumns.summary && resumeSummary) {
+      await writer
+        .from('interview_sessions')
+        .update({ resume_summary: resumeSummary })
+        .eq('id', session.id)
+        .is('resume_summary', null);
+    }
+    const askedResumeQuestions = resumeColumns.asked;
+    let resumeRecord: AskedResumeQuestion | null = null;
     if (!assistantText) {
       const aiConfig = readAiConfig();
       if (!aiConfig.ok) {
@@ -146,28 +165,45 @@ Deno.serve(async (req) => {
         reserved.answer,
         mode === 'repair' ? 'repair' : 'append'
       );
-      const reply = await requestInterviewReply({
-        model: aiConfig.model,
-        apiKey: aiConfig.apiKey,
-        systemPrompt: template.systemPrompt,
-        conversation,
-        timeoutMs: aiConfig.timeoutMs,
-        maxRetries: aiConfig.maxRetries,
-        retryBaseMs: aiConfig.retryBaseMs,
+      const basePrompt = resumeSummary
+        ? `${template.systemPrompt}\n\n${resumeSystemAddendum(resumeSummary, askedResumeQuestions)}`
+        : template.systemPrompt;
+      const resolved = await resolveResumeAwareReply({
+        summary: resumeSummary,
+        asked: askedResumeQuestions,
+        request: async (steering) => {
+          const reply = await requestInterviewReply({
+            model: aiConfig.model,
+            apiKey: aiConfig.apiKey,
+            systemPrompt: steering ? `${basePrompt}\n\n${steering}` : basePrompt,
+            conversation,
+            timeoutMs: aiConfig.timeoutMs,
+            maxRetries: aiConfig.maxRetries,
+            retryBaseMs: aiConfig.retryBaseMs,
+          });
+          if (!reply.ok) return { ok: false, code: reply.code, httpStatus: reply.httpStatus };
+          return { ok: true, text: reply.text };
+        },
       });
-      if (!reply.ok) {
+      if (!resolved.ok) {
         await markClaimFailed(writer, session.id, clientTurnId, reserved.claimedAt);
         await markSessionFailed(writer, session.id);
         return fail(
-          reply.httpStatus,
-          reply.code,
-          CLIENT_MESSAGE[reply.code] ?? CLIENT_MESSAGE['INTERVIEW_AI_UNAVAILABLE'],
+          resolved.httpStatus,
+          resolved.code,
+          CLIENT_MESSAGE[resolved.code] ?? CLIENT_MESSAGE['INTERVIEW_AI_UNAVAILABLE'],
           sessionId
         );
       }
-      const noted = await noteAssistantText(writer, session.id, clientTurnId, reserved.claimedAt, reply.text);
+      const noted = await noteAssistantText(writer, session.id, clientTurnId, reserved.claimedAt, resolved.text);
       if (!noted) return fail(409, 'TURN_IN_PROGRESS', CLIENT_MESSAGE['TURN_IN_PROGRESS'], sessionId);
-      assistantText = reply.text;
+      assistantText = resolved.text;
+      resumeRecord = resolved.record;
+    } else if (resumeSummary) {
+      const judged = judgeResumeQuestion(assistantText, resumeSummary, askedResumeQuestions);
+      if (judged.grounded && !judged.duplicate) {
+        resumeRecord = { question: assistantText, anchors: judged.anchors };
+      }
     }
 
     let turns = history.turns;
@@ -199,6 +235,12 @@ Deno.serve(async (req) => {
         const assistant = saved.turns.find((turn) => turn.role === 'assistant');
         if (!assistant) return fail(500, 'NOT_SAVED', 'Your answer was not saved. Please try again.', sessionId);
         await markClaimCompleted(writer, session.id, clientTurnId, assistant.content);
+        if (resumeRecord && askedResumeQuestions.length < 40) {
+          await writer
+            .from('interview_sessions')
+            .update({ resume_question_log: [...askedResumeQuestions, resumeRecord] })
+            .eq('id', session.id);
+        }
         return json({ assistantMessage: assistant.content, replayed: false, turns: saved.turns });
       }
       if (saved.conflict === 'client_turn' || saved.conflict === 'seq') continue;
