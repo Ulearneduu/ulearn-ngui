@@ -18,6 +18,14 @@ import {
 } from '@angular/forms';
 import { ToastService } from '../../../core/services/toast';
 import {
+  DEFAULT_INTERVIEW_CODING_LANGUAGE,
+  INTERVIEW_CODING_LANGUAGES,
+  InterviewCodingLanguageId,
+  InterviewCodingProblem,
+  emptyInterviewCodingProblem,
+  normalizeInterviewCodingLanguage,
+} from '../../../interview/interview-coding';
+import {
   AdminInterviewTemplatesService,
   InterviewTemplateAdminKind,
   InterviewTemplateAdminRow,
@@ -66,6 +74,27 @@ function rubricJsonObject(control: AbstractControl): ValidationErrors | null {
   }
 }
 
+function publicTestsJson(control: AbstractControl): ValidationErrors | null {
+  const text = String(control.value ?? '').trim();
+  if (!text) return { required: true };
+  try {
+    const parsed: unknown = JSON.parse(text);
+    if (!Array.isArray(parsed)) return { testsArray: true };
+    for (const item of parsed) {
+      if (typeof item !== 'object' || item === null || Array.isArray(item)) {
+        return { testsShape: true };
+      }
+      const row = item as Record<string, unknown>;
+      if (typeof row['input'] !== 'string' || typeof row['expectedOutput'] !== 'string') {
+        return { testsShape: true };
+      }
+    }
+    return null;
+  } catch {
+    return { testsJson: true };
+  }
+}
+
 @Component({
   selector: 'app-admin-interview-templates',
   standalone: true,
@@ -81,6 +110,7 @@ export class AdminInterviewTemplates implements OnInit {
   private readonly templatesService = inject(AdminInterviewTemplatesService);
 
   readonly kindOptions = KIND_OPTIONS;
+  readonly codingLanguages = INTERVIEW_CODING_LANGUAGES;
   readonly versionLabel = interviewTemplateVersionLabel;
 
   readonly templates = signal<InterviewTemplateAdminRow[]>([]);
@@ -108,6 +138,12 @@ export class AdminInterviewTemplates implements OnInit {
     status: ['draft' as InterviewTemplateAdminStatus, Validators.required],
     system_prompt: ['', [Validators.required, trimmedMinLength(20)]],
     rubric_json: ['{}', [Validators.required, rubricJsonObject]],
+    coding_enabled: [false],
+    coding_title: ['Coding challenge'],
+    coding_prompt: [''],
+    coding_starter: [''],
+    coding_language: [DEFAULT_INTERVIEW_CODING_LANGUAGE as InterviewCodingLanguageId],
+    coding_tests_json: ['[]', [publicTestsJson]],
   });
 
   readonly visibleTemplates = computed(() => {
@@ -126,6 +162,7 @@ export class AdminInterviewTemplates implements OnInit {
   });
 
   readonly isCreateMode = computed(() => this.editingId() === null);
+  readonly showCodingFields = computed(() => this.form.controls.kind.value === 'technical');
 
   ngOnInit(): void {
     void this.loadTemplates();
@@ -158,15 +195,7 @@ export class AdminInterviewTemplates implements OnInit {
 
   openCreate(): void {
     this.editingId.set(null);
-    this.form.reset({
-      slug: '',
-      title: '',
-      kind: 'hr',
-      duration_minutes: 20,
-      status: 'draft',
-      system_prompt: '',
-      rubric_json: '{}',
-    });
+    this.resetForm(null);
     this.form.controls.slug.enable();
     this.revealForm();
   }
@@ -178,15 +207,7 @@ export class AdminInterviewTemplates implements OnInit {
       return;
     }
     this.editingId.set(id);
-    this.form.reset({
-      slug: row.slug,
-      title: row.title,
-      kind: row.kind,
-      duration_minutes: row.duration_minutes,
-      status: row.status,
-      system_prompt: row.system_prompt,
-      rubric_json: JSON.stringify(row.rubric_json, null, 2),
-    });
+    this.resetForm(row);
     this.form.controls.slug.disable();
     this.revealForm();
   }
@@ -214,6 +235,32 @@ export class AdminInterviewTemplates implements OnInit {
       return;
     }
 
+    let coding: InterviewCodingProblem | null = null;
+    if (raw.kind === 'technical') {
+      let tests: { input: string; expectedOutput: string }[] = [];
+      try {
+        tests = JSON.parse(raw.coding_tests_json.trim()) as {
+          input: string;
+          expectedOutput: string;
+        }[];
+      } catch {
+        this.toast.error('Public test cases must be valid JSON.');
+        return;
+      }
+      if (raw.coding_enabled && !raw.coding_prompt.trim()) {
+        this.toast.error('Enter a coding problem prompt, or disable the coding step.');
+        return;
+      }
+      coding = {
+        enabled: raw.coding_enabled,
+        title: raw.coding_title.trim() || 'Coding challenge',
+        prompt: raw.coding_prompt.trim(),
+        starterCode: raw.coding_starter,
+        language: normalizeInterviewCodingLanguage(raw.coding_language),
+        publicTestCases: tests,
+      };
+    }
+
     const input = {
       title: raw.title.trim(),
       kind: raw.kind,
@@ -221,6 +268,7 @@ export class AdminInterviewTemplates implements OnInit {
       status: raw.status,
       system_prompt: raw.system_prompt.trim(),
       rubric_json: rubric,
+      coding,
     };
 
     this.isSaving.set(true);
@@ -244,6 +292,25 @@ export class AdminInterviewTemplates implements OnInit {
     } finally {
       this.isSaving.set(false);
     }
+  }
+
+  private resetForm(row: InterviewTemplateAdminRow | null): void {
+    const coding = row?.coding ?? emptyInterviewCodingProblem();
+    this.form.reset({
+      slug: row?.slug ?? '',
+      title: row?.title ?? '',
+      kind: row?.kind ?? 'hr',
+      duration_minutes: row?.duration_minutes ?? 20,
+      status: row?.status ?? 'draft',
+      system_prompt: row?.system_prompt ?? '',
+      rubric_json: row ? JSON.stringify(row.rubric_json, null, 2) : '{}',
+      coding_enabled: coding.enabled,
+      coding_title: coding.title,
+      coding_prompt: coding.prompt,
+      coding_starter: coding.starterCode,
+      coding_language: coding.language,
+      coding_tests_json: JSON.stringify(coding.publicTestCases, null, 2),
+    });
   }
 
   private revealForm(): void {

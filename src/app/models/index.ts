@@ -773,6 +773,7 @@ export interface InterviewSessionSummary {
   templateTitle: string;
   templateKind: InterviewTemplateKind;
   promptVersion: string;
+  templateVersionId?: string | null;
   startedAt: string;
   endedAt: string | null;
   durationMinutes: number;

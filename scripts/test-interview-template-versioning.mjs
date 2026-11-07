@@ -58,6 +58,12 @@ check('migration defines snapshot table and capture trigger', () => {
   assert.match(sql, /BEFORE INSERT OR UPDATE ON public\.interview_templates/);
 });
 
+check('INT-013 extends capture trigger with coding_json', () => {
+  const sql = read('supabase/migrations/20261107_interview_template_coding.sql');
+  assert.match(sql, /coding_json/);
+  assert.match(sql, /OR NEW\.coding_json IS DISTINCT FROM OLD\.coding_json/);
+});
+
 check('interview-turn loads the session snapshot before the live template', () => {
   const source = read('supabase/functions/interview-turn/index.ts');
   const handler = source.slice(source.indexOf('Deno.serve'), source.indexOf('async function insertTurns'));

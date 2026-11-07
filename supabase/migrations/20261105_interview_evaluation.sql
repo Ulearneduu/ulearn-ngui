@@ -393,7 +393,7 @@ BEGIN
      OR jsonb_array_length(p_improvements) < 1
      OR jsonb_array_length(p_improvements) > 6
      OR jsonb_array_length(p_scores) < 1
-     OR jsonb_array_length(p_scores) > 8
+     OR jsonb_array_length(p_scores) > 9
   THEN
     RAISE EXCEPTION 'invalid evaluation payload' USING ERRCODE = '22023';
   END IF;

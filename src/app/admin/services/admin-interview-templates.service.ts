@@ -1,5 +1,10 @@
 import { Injectable } from '@angular/core';
 import { supabase } from '../../core/supabase.client';
+import {
+  InterviewCodingProblem,
+  parseInterviewCodingProblem,
+  toInterviewCodingJson,
+} from '../../interview/interview-coding';
 
 export type InterviewTemplateAdminKind = 'hr' | 'technical' | 'domain';
 export type InterviewTemplateAdminStatus = 'draft' | 'published';
@@ -14,6 +19,7 @@ export interface InterviewTemplateAdminRow {
   status: InterviewTemplateAdminStatus;
   system_prompt: string;
   rubric_json: Record<string, unknown>;
+  coding: InterviewCodingProblem | null;
   current_version: number;
   created_at: string;
 }
@@ -25,6 +31,8 @@ export interface InterviewTemplateAdminSaveInput {
   status: InterviewTemplateAdminStatus;
   system_prompt: string;
   rubric_json: Record<string, unknown>;
+  /** Technical templates only; null clears coding. */
+  coding: InterviewCodingProblem | null;
 }
 
 export interface InterviewTemplateAdminCreateInput extends InterviewTemplateAdminSaveInput {
@@ -33,6 +41,9 @@ export interface InterviewTemplateAdminCreateInput extends InterviewTemplateAdmi
 
 const TEMPLATE_KINDS: readonly InterviewTemplateAdminKind[] = ['hr', 'technical', 'domain'];
 const TEMPLATE_STATUSES: readonly InterviewTemplateAdminStatus[] = ['draft', 'published'];
+
+const ADMIN_SELECT =
+  'id, slug, title, kind, duration_minutes, status, system_prompt, rubric_json, coding_json, current_version, created_at';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -85,9 +96,18 @@ function asAdminRow(value: unknown): InterviewTemplateAdminRow | null {
     status: status as InterviewTemplateAdminStatus,
     system_prompt: systemPrompt,
     rubric_json: rubric,
+    coding: parseInterviewCodingProblem(value['coding_json']),
     current_version: currentVersion,
     created_at: createdAt,
   };
+}
+
+function codingPayloadForKind(
+  kind: InterviewTemplateAdminKind,
+  coding: InterviewCodingProblem | null
+): Record<string, unknown> | null {
+  if (kind !== 'technical') return null;
+  return toInterviewCodingJson(coding);
 }
 
 /** Admin UI label for the live template's current INT-009 snapshot number. */
@@ -102,9 +122,7 @@ export class AdminInterviewTemplatesService {
   async listTemplates(): Promise<InterviewTemplateAdminRow[]> {
     const { data, error } = await supabase
       .from('interview_templates')
-      .select(
-        'id, slug, title, kind, duration_minutes, status, system_prompt, rubric_json, current_version, created_at'
-      )
+      .select(ADMIN_SELECT)
       .order('title', { ascending: true });
 
     if (error) throw new Error(error.message);
@@ -128,10 +146,9 @@ export class AdminInterviewTemplatesService {
         status: input.status,
         system_prompt: input.system_prompt.trim(),
         rubric_json: input.rubric_json,
+        coding_json: codingPayloadForKind(input.kind, input.coding),
       })
-      .select(
-        'id, slug, title, kind, duration_minutes, status, system_prompt, rubric_json, current_version, created_at'
-      )
+      .select(ADMIN_SELECT)
       .single();
 
     if (error) throw new Error(error.message);
@@ -153,11 +170,10 @@ export class AdminInterviewTemplatesService {
         status: input.status,
         system_prompt: input.system_prompt.trim(),
         rubric_json: input.rubric_json,
+        coding_json: codingPayloadForKind(input.kind, input.coding),
       })
       .eq('id', id)
-      .select(
-        'id, slug, title, kind, duration_minutes, status, system_prompt, rubric_json, current_version, created_at'
-      )
+      .select(ADMIN_SELECT)
       .single();
 
     if (error) throw new Error(error.message);

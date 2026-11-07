@@ -22,6 +22,12 @@ test('interview-evaluate authorizes and validates before it calls the provider o
   assert.ok(handler.indexOf('session.userId !== userId') < replyAt);
   assert.ok(handler.indexOf('planEvaluation') < replyAt);
   assert.ok(handler.indexOf('parseEvaluationPayload') < applyAt);
+  assert.ok(handler.indexOf('loadSessionCoding') < applyAt);
+  assert.ok(handler.indexOf('mergeCodingCompetency') < applyAt);
+  assert.ok(handler.indexOf('codingCompetencyFromSessionRow') < applyAt);
+  assert.ok(handler.indexOf('MAX_EVALUATION_SCORES') < applyAt);
+  assert.ok(handler.indexOf('TOO_MANY_COMPETENCIES') < applyAt);
+  assert.match(source, /from\('interview_session_coding'\)/);
   assert.equal(handler.includes('record[\'overallScore\']'), false);
   assert.equal(handler.includes('record["score"]'), false);
   assert.match(source, /Deno\.env\.get\('OPENAI_API_KEY'\)/);
@@ -49,6 +55,8 @@ test('the evaluation migration keeps student score writes closed and preserves v
   assert.match(sql, /REVOKE ALL ON FUNCTION public\.claim_interview_evaluation\(uuid, text\) FROM PUBLIC, anon, authenticated/);
   assert.match(sql, /evaluation_status = 'failed'/);
   assert.match(sql, /AND s\.status = 'completed'/);
+  assert.match(sql, /jsonb_array_length\(p_scores\) > 9/);
+  assert.equal(/jsonb_array_length\(p_scores\) > 8(?!\d)/.test(sql), false);
   assert.equal(sql.includes('DROP POLICY IF EXISTS "Users read turns in own sessions"'), false);
   assert.equal(sql.includes('DROP POLICY IF EXISTS "Users read own interview sessions"'), false);
 });
@@ -75,6 +83,8 @@ test('Angular evaluation code does not carry provider or service-role secrets', 
   const result = read('src/app/interview/interview-result.ts');
   assert.match(result, /data\.competencies/);
   assert.match(result, /data\.turns/);
+  assert.match(result, /isCodingCompetency/);
+  assert.match(result, /codingOutcomeLabel/);
   assert.match(result, /Your Next Steps/);
   assert.match(result, /Personalized recommendations based on your interview performance\./);
   assert.ok(result.indexOf('Generating your results') < result.indexOf('Your Next Steps'));
@@ -83,6 +93,8 @@ test('Angular evaluation code does not carry provider or service-role secrets', 
   assert.match(result, /@media \(max-width: 1024px\)/);
   assert.match(result, /@media \(max-width: 720px\)/);
   assert.equal(result.includes('score: 80'), false);
+  const history = read('src/app/interview/interview-history.ts');
+  assert.match(history, /\/interview\/session', sessionId, 'result'/);
   const routes = read('src/app/app.routes.ts');
   assert.match(routes, /session\/:id\/result/);
 });

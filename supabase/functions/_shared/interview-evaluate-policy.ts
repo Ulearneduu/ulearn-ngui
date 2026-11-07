@@ -161,6 +161,69 @@ export function aggregateOverallScore(scores: readonly number[]): number | null 
   return Math.round(mean * 100) / 100;
 }
 
+/** Competency label written from interview_session_coding public-test results (INT-013). */
+export const CODING_COMPETENCY = 'Coding';
+
+/**
+ * apply_interview_evaluation accepts up to 9 score rows:
+ * at most 8 AI/rubric competencies (rubricLabels cap) plus one Judge0 Coding row.
+ */
+export const MAX_EVALUATION_SCORES = 9;
+
+export interface SessionCodingRow {
+  language?: string | null;
+  code?: string | null;
+  passed_count: number | null;
+  total_count: number | null;
+  all_passed: boolean | null;
+  results_json?: unknown;
+}
+
+/**
+ * Build a Coding competency from persisted Judge0 public-test results.
+ * Returns null when the student never ran/saved a coding attempt (optional step).
+ * Score is (passed/total)*100 rounded to 2 decimals; 0 when total is 0.
+ */
+export function codingCompetencyFromSessionRow(row: SessionCodingRow | null | undefined): ApplicableScore | null {
+  if (!row) return null;
+  const totalRaw = row.total_count;
+  const passedRaw = row.passed_count;
+  const total = typeof totalRaw === 'number' && Number.isFinite(totalRaw) ? Math.max(0, Math.trunc(totalRaw)) : 0;
+  const passed =
+    typeof passedRaw === 'number' && Number.isFinite(passedRaw) ? Math.max(0, Math.trunc(passedRaw)) : 0;
+  const clampedPassed = Math.min(passed, total);
+  const score =
+    total > 0 ? Math.round(((100 * clampedPassed) / total) * 100) / 100 : 0;
+  const allPassed = row.all_passed === true || (total > 0 && clampedPassed === total);
+  const language = typeof row.language === 'string' && row.language.trim() ? row.language.trim() : 'unknown';
+  return {
+    competency: CODING_COMPETENCY,
+    score,
+    feedback: allPassed
+      ? `Passed all ${total} public tests in the coding step.`
+      : total === 0
+        ? 'Coding was submitted but no public tests were configured.'
+        : `Passed ${clampedPassed} of ${total} public tests in the coding step.`,
+    evidence: `Persisted interview_session_coding public tests: ${clampedPassed}/${total} (${language}).`,
+  };
+}
+
+/**
+ * Append the deterministic Coding competency after transcript/rubric scores.
+ * Replaces any model-produced "Coding" row so Judge0 results win.
+ * Leaves other competencies (including Programming) unchanged.
+ */
+export function mergeCodingCompetency(
+  competencies: readonly ApplicableScore[],
+  coding: ApplicableScore | null
+): ApplicableScore[] {
+  const withoutCoding = competencies.filter(
+    (item) => item.competency.trim().toLowerCase() !== CODING_COMPETENCY.toLowerCase()
+  );
+  if (!coding) return [...withoutCoding];
+  return [...withoutCoding, coding];
+}
+
 export function rowsToInsert<T extends { competency: string }>(
   existing: readonly { competency: string; evalVersion: string }[],
   incoming: readonly T[],

@@ -1,14 +1,18 @@
 import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
 import {
   EVAL_VERSION,
+  MAX_EVALUATION_SCORES,
   aggregateOverallScore,
   buildEvaluationPrompt,
+  codingCompetencyFromSessionRow,
   competenciesForTemplate,
   formatTranscript,
+  mergeCodingCompetency,
   parseEvaluationPayload,
   planEvaluation,
   resolvePracticeTips,
   requestEvaluationReply,
+  type SessionCodingRow,
   type TranscriptTurn,
 } from '../_shared/interview-evaluate-policy.ts';
 import { normalizeSessionId } from '../_shared/interview-turn-policy.ts';
@@ -184,9 +188,32 @@ Deno.serve(async (req) => {
       return fail(502, 'INVALID_EVALUATION', CLIENT_MESSAGE['INVALID_EVALUATION'], sessionId);
     }
 
+    // INT-013: fold persisted public-test coding into interview_scores (not an AI guess).
+    const codingRow = await loadSessionCoding(writer, session.id);
+    const mergedCompetencies = mergeCodingCompetency(
+      parsed.evaluation.competencies,
+      codingCompetencyFromSessionRow(codingRow)
+    );
+    if (mergedCompetencies.length > MAX_EVALUATION_SCORES) {
+      await markFailed(writer, session.id, claim.claimedAt);
+      console.error(JSON.stringify({
+        source: 'interview-evaluate',
+        code: 'TOO_MANY_COMPETENCIES',
+        count: mergedCompetencies.length,
+        max: MAX_EVALUATION_SCORES,
+        sessionId,
+      }));
+      return fail(
+        502,
+        'INVALID_EVALUATION',
+        'The evaluation could not be saved because too many competency scores were produced. Your interview is saved. You can try again.',
+        sessionId
+      );
+    }
+
     const tips = resolvePracticeTips({
       rawTips: parsed.evaluation.modelTips,
-      competencies: parsed.evaluation.competencies,
+      competencies: mergedCompetencies,
       strengths: parsed.evaluation.strengths,
       improvements: parsed.evaluation.improvements,
     });
@@ -202,7 +229,7 @@ Deno.serve(async (req) => {
       strengths: parsed.evaluation.strengths,
       improvements: parsed.evaluation.improvements,
       tips,
-      scores: parsed.evaluation.competencies.map((item) => ({
+      scores: mergedCompetencies.map((item) => ({
         competency: item.competency,
         score: item.score,
         rationale: item.feedback,
@@ -263,6 +290,37 @@ async function loadTurns(
   }
   turns.sort((left, right) => left.seq - right.seq);
   return { ok: true, turns };
+}
+
+/** Optional INT-013 coding attempt for this session. Missing row means coding was not run. */
+async function loadSessionCoding(
+  writer: SupabaseClient,
+  sessionId: string
+): Promise<SessionCodingRow | null> {
+  const { data, error } = await writer
+    .from('interview_session_coding')
+    .select('language, code, passed_count, total_count, all_passed, results_json')
+    .eq('session_id', sessionId)
+    .maybeSingle();
+  if (error) {
+    console.error(JSON.stringify({
+      source: 'interview-evaluate',
+      code: 'CODING_LOAD_FAILED',
+      dbCode: error.code ?? null,
+      sessionId,
+    }));
+    return null;
+  }
+  if (!data || typeof data !== 'object') return null;
+  const row = data as Record<string, unknown>;
+  return {
+    language: typeof row['language'] === 'string' ? row['language'] : null,
+    code: typeof row['code'] === 'string' ? row['code'] : null,
+    passed_count: typeof row['passed_count'] === 'number' ? row['passed_count'] : null,
+    total_count: typeof row['total_count'] === 'number' ? row['total_count'] : null,
+    all_passed: typeof row['all_passed'] === 'boolean' ? row['all_passed'] : null,
+    results_json: row['results_json'],
+  };
 }
 
 async function loadStored(

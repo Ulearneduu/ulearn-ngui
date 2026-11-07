@@ -6,6 +6,7 @@ import {
   CrtPracticeModule,
   CrtPracticeService
 } from './services/crt-practice.service';
+import { CrtReadinessScore, CrtReadinessService } from './services/crt-readiness.service';
 
 interface CrtPathProgress {
   path: CrtPracticePath;
@@ -13,6 +14,7 @@ interface CrtPathProgress {
   attemptedModules: number;
   progress: number;
   continueModule: CrtPracticeModule | null;
+  readiness: CrtReadinessScore;
 }
 
 @Component({
@@ -95,6 +97,54 @@ interface CrtPathProgress {
       font-size: 1.2rem;
     }
 
+    .path-heading {
+      width: 100%;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px 16px;
+    }
+
+    .path-heading h2 {
+      flex: 1 1 220px;
+    }
+
+    .readiness {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 4px;
+      min-width: 96px;
+      padding: 10px 14px;
+      border-radius: 12px;
+      background: color-mix(in srgb, var(--purple) 14%, var(--card));
+    }
+
+    .readiness-value {
+      color: var(--navy);
+      font-family: 'Poppins', sans-serif;
+      font-size: 1.6rem;
+      font-weight: 800;
+      line-height: 1;
+    }
+
+    .readiness-label {
+      color: var(--muted);
+      font-size: 0.75rem;
+      font-weight: 700;
+    }
+
+    @media (max-width: 640px) {
+      .crt-home {
+        padding: 32px 16px 56px;
+      }
+
+      .readiness {
+        align-items: flex-start;
+      }
+    }
+
     .progress-info {
       width: 100%;
       display: flex;
@@ -138,6 +188,7 @@ interface CrtPathProgress {
 })
 export class Crt implements OnInit {
   private readonly practice = inject(CrtPracticeService);
+  private readonly readiness = inject(CrtReadinessService);
   private readonly router = inject(Router);
 
   readonly loading = signal(true);
@@ -160,7 +211,10 @@ export class Crt implements OnInit {
 
       const progressItems = await Promise.all(
         publishedPaths.map(async (path): Promise<CrtPathProgress> => {
-          const modules = await this.practice.listModules(path.id);
+          const [modules, readiness] = await Promise.all([
+            this.practice.listModules(path.id),
+            this.readiness.getPathReadiness(path.id)
+          ]);
 
           const pathAttempts = attempts.filter(
             (attempt) =>
@@ -208,7 +262,8 @@ export class Crt implements OnInit {
             modules,
             attemptedModules,
             progress,
-            continueModule
+            continueModule,
+            readiness
           };
         })
       );

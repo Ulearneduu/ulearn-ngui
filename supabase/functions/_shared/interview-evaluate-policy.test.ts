@@ -1,14 +1,18 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  CODING_COMPETENCY,
   EVAL_VERSION,
   EVALUATION_RULES,
+  MAX_EVALUATION_SCORES,
   aggregateOverallScore,
   buildEvaluationPrompt,
+  codingCompetencyFromSessionRow,
   competenciesForTemplate,
   fallbackPracticeTips,
   formatTranscript,
   lowestApplicableCompetencies,
+  mergeCodingCompetency,
   normalizePracticeTips,
   parseEvaluationPayload,
   planEvaluation,
@@ -325,4 +329,123 @@ test('practice tips follow the lowest applicable competencies and ignore N/A row
   });
   assert.equal(repeated.includes(fallback[0] ?? ''), false);
   assert.ok(repeated.length >= 3 && repeated.length <= 5);
+});
+
+test('coding competency comes from persisted public-test results, not the transcript model', () => {
+  assert.equal(codingCompetencyFromSessionRow(null), null);
+  assert.equal(codingCompetencyFromSessionRow(undefined), null);
+
+  const passed = codingCompetencyFromSessionRow({
+    language: 'javascript',
+    code: 'return 1',
+    passed_count: 2,
+    total_count: 2,
+    all_passed: true,
+  });
+  assert.ok(passed);
+  assert.equal(passed?.competency, CODING_COMPETENCY);
+  assert.equal(passed?.score, 100);
+  assert.match(passed?.feedback ?? '', /Passed all 2 public tests/);
+  assert.match(passed?.evidence ?? '', /2\/2/);
+
+  const partial = codingCompetencyFromSessionRow({
+    language: 'python',
+    code: 'print(1)',
+    passed_count: 1,
+    total_count: 3,
+    all_passed: false,
+  });
+  assert.ok(partial);
+  assert.equal(partial?.score, Math.round((100 * 1) / 3 * 100) / 100);
+  assert.match(partial?.feedback ?? '', /Passed 1 of 3/);
+
+  const emptyTests = codingCompetencyFromSessionRow({
+    language: 'java',
+    code: 'class Main {}',
+    passed_count: 0,
+    total_count: 0,
+    all_passed: false,
+  });
+  assert.ok(emptyTests);
+  assert.equal(emptyTests?.score, 0);
+});
+
+test('mergeCodingCompetency appends Judge0 Coding and replaces a model Coding row', () => {
+  const base = [
+    { competency: 'Clarity', score: 70, feedback: 'Clear', evidence: 'Said X' },
+    { competency: 'Coding', score: 90, feedback: 'AI guess', evidence: 'Talked about code' },
+  ];
+  assert.deepEqual(mergeCodingCompetency(base, null).map((item) => item.competency), ['Clarity']);
+
+  const coding = codingCompetencyFromSessionRow({
+    language: 'javascript',
+    passed_count: 1,
+    total_count: 2,
+    all_passed: false,
+  });
+  const merged = mergeCodingCompetency(base, coding);
+  assert.deepEqual(merged.map((item) => item.competency), ['Clarity', 'Coding']);
+  assert.equal(merged[1]?.score, 50);
+  assert.match(merged[1]?.evidence ?? '', /interview_session_coding/);
+  assert.equal(merged.some((item) => item.feedback === 'AI guess'), false);
+
+  const hrOnly = mergeCodingCompetency(
+    [{ competency: 'Communication', score: 80, feedback: 'ok', evidence: 'y' }],
+    null
+  );
+  assert.deepEqual(hrOnly.map((item) => item.competency), ['Communication']);
+  assert.equal(aggregateOverallScore(hrOnly.map((item) => item.score)), 80);
+});
+
+test('technical interviews without a coding attempt keep transcript competencies only', () => {
+  const technical = competenciesForTemplate('technical', null);
+  const parsed = parseEvaluationPayload(JSON.stringify({
+    summary: 'Solid technical answers with clear trade-offs.',
+    strengths: ['Named a concrete approach.'],
+    improvements: ['State complexity.'],
+    competencies: technical.map((name) => ({
+      name,
+      applicable: true,
+      score: 70,
+      feedback: 'Shown in the transcript.',
+      evidence: 'Described an approach.',
+    })),
+  }), technical);
+  assert.equal(parsed.ok, true);
+  if (!parsed.ok) return;
+  const merged = mergeCodingCompetency(parsed.evaluation.competencies, codingCompetencyFromSessionRow(null));
+  assert.equal(merged.some((item) => item.competency === CODING_COMPETENCY), false);
+  assert.equal(merged.length, technical.length);
+});
+
+test('eight rubric competencies plus one Coding score fit the apply limit of nine', () => {
+  const eight = Array.from({ length: 8 }, (_, index) => ({
+    competency: `Competency ${index + 1}`,
+    score: 60 + index,
+    feedback: `Feedback ${index + 1}`,
+    evidence: `Evidence ${index + 1}`,
+  }));
+  const withModelCoding = [
+    ...eight,
+    { competency: 'Coding', score: 99, feedback: 'AI guess', evidence: 'Talked about code' },
+  ];
+  const coding = codingCompetencyFromSessionRow({
+    language: 'javascript',
+    code: 'return 42',
+    passed_count: 2,
+    total_count: 2,
+    all_passed: true,
+  });
+  assert.ok(coding);
+  const merged = mergeCodingCompetency(withModelCoding, coding);
+  assert.equal(merged.length, 9);
+  assert.ok(merged.length <= MAX_EVALUATION_SCORES);
+  assert.equal(merged.filter((item) => item.competency === CODING_COMPETENCY).length, 1);
+  assert.equal(merged[8]?.competency, CODING_COMPETENCY);
+  assert.equal(merged[8]?.score, 100);
+  assert.equal(merged.some((item) => item.feedback === 'AI guess'), false);
+  assert.equal(
+    aggregateOverallScore(merged.map((item) => item.score)),
+    Math.round(((60 + 61 + 62 + 63 + 64 + 65 + 66 + 67 + 100) / 9) * 100) / 100
+  );
 });

@@ -14,9 +14,18 @@ import {
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { map } from 'rxjs';
-import { InterviewSessionSummary, InterviewTurn } from '../models';
+import { InterviewTurn } from '../models';
 import { InterviewRequestError } from './interview-api';
-import { InterviewCatalogService, interviewErrorMessage } from './interview-catalog.service';
+import {
+  InterviewCodingPublicTestResult,
+  InterviewCodingProblem,
+} from './interview-coding';
+import {
+  InterviewCatalogService,
+  InterviewSessionDetails,
+  interviewErrorMessage,
+} from './interview-catalog.service';
+import { InterviewSessionCoding } from './interview-session-coding';
 import {
   INTERVIEW_LOW_TIME_MS,
   formatInterviewClock,
@@ -49,7 +58,7 @@ const AI_FAILURE_CODES = new Set([
   selector: 'app-interview-session',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink],
+  imports: [RouterLink, InterviewSessionCoding],
   template: `
     <div class="session-page">
       @if (loading() && !session()) {
@@ -192,6 +201,19 @@ const AI_FAILURE_CODES = new Set([
               </button>
             </div>
           </div>
+
+          @if (codingProblem(); as coding) {
+            <app-interview-session-coding
+              [sessionId]="current.id"
+              [problem]="coding"
+              [editable]="canUseCoding()"
+              [initialCode]="savedCodingCode()"
+              [initialLanguage]="savedCodingLanguage()"
+              [initialResults]="savedCodingResults()"
+              [initialPassedCount]="savedCodingPassed()"
+              [initialTotalCount]="savedCodingTotal()"
+            />
+          }
 
           <section class="surface">
             <div #transcript class="conversation" role="log" aria-relevant="additions" aria-label="Interview conversation">
@@ -724,7 +746,7 @@ export class InterviewSession {
   readonly error = signal<string | null>(null);
   readonly submitError = signal<string | null>(null);
   readonly submitNotice = signal<SubmitNotice | null>(null);
-  readonly session = signal<InterviewSessionSummary | null>(null);
+  readonly session = signal<InterviewSessionDetails | null>(null);
   readonly turns = signal<InterviewTurn[]>([]);
   readonly draft = signal('');
   readonly inputMode = signal<InterviewInputMode>('text');
@@ -743,6 +765,12 @@ export class InterviewSession {
   readonly reconnecting = signal(false);
   readonly restored = signal(false);
   readonly inflightAnswer = signal<string | null>(null);
+  readonly codingProblem = signal<InterviewCodingProblem | null>(null);
+  readonly savedCodingCode = signal<string | null>(null);
+  readonly savedCodingLanguage = signal<string | null>(null);
+  readonly savedCodingResults = signal<InterviewCodingPublicTestResult[]>([]);
+  readonly savedCodingPassed = signal<number | null>(null);
+  readonly savedCodingTotal = signal<number | null>(null);
   private readonly nowMs = signal(Date.now());
   private readonly clockOffsetMs = signal(0);
 
@@ -776,6 +804,10 @@ export class InterviewSession {
     const current = this.session();
     return current?.status === 'in_progress' && this.remainingMs() === 0;
   });
+
+  readonly canUseCoding = computed(
+    () => this.session()?.status === 'in_progress' && !this.timeUp() && !this.ending()
+  );
 
   readonly timerLabel = computed(() => {
     const current = this.session();
@@ -1202,6 +1234,31 @@ export class InterviewSession {
       if (request !== this.loadSeq) return;
       this.session.set(session);
       this.turns.set(turns);
+      this.codingProblem.set(session.codingProblem);
+      try {
+        const saved = await this.catalog.getSessionCoding(sessionId);
+        if (request !== this.loadSeq) return;
+        if (saved) {
+          this.savedCodingCode.set(saved.code);
+          this.savedCodingLanguage.set(saved.language);
+          this.savedCodingResults.set(saved.results);
+          this.savedCodingPassed.set(saved.passedCount);
+          this.savedCodingTotal.set(saved.totalCount);
+        } else {
+          this.savedCodingCode.set(null);
+          this.savedCodingLanguage.set(null);
+          this.savedCodingResults.set([]);
+          this.savedCodingPassed.set(null);
+          this.savedCodingTotal.set(null);
+        }
+      } catch {
+        // Coding table may not exist until migration is applied; chat still works.
+        this.savedCodingCode.set(null);
+        this.savedCodingLanguage.set(null);
+        this.savedCodingResults.set([]);
+        this.savedCodingPassed.set(null);
+        this.savedCodingTotal.set(null);
+      }
     } catch (error: unknown) {
       if (request !== this.loadSeq) return;
       if (!preserveDraft) {

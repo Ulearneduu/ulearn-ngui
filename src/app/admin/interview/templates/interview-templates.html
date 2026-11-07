@@ -181,6 +181,76 @@
           }
         </div>
 
+        @if (form.controls.kind.value === 'technical') {
+          <section class="coding-panel" aria-labelledby="tpl-coding-heading">
+            <h3 id="tpl-coding-heading">Coding step (optional)</h3>
+            <p class="coding-help">
+              When enabled, students see this problem mid-session. Saving bumps the template version
+              (INT-009) so in-progress sessions keep their snapshot.
+            </p>
+
+            <label class="coding-toggle">
+              <input type="checkbox" formControlName="coding_enabled" />
+              Enable coding step for this technical template
+            </label>
+
+            <div class="form-group">
+              <label for="tpl-coding-title">Problem title</label>
+              <input id="tpl-coding-title" class="form-input" type="text" formControlName="coding_title" />
+            </div>
+
+            <div class="form-group">
+              <label for="tpl-coding-prompt">Problem prompt</label>
+              <textarea
+                id="tpl-coding-prompt"
+                class="form-textarea"
+                rows="5"
+                formControlName="coding_prompt"
+                placeholder="Describe the coding challenge and I/O format…"
+              ></textarea>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label for="tpl-coding-language">Language</label>
+                <select id="tpl-coding-language" class="form-select" formControlName="coding_language">
+                  @for (lang of codingLanguages; track lang.id) {
+                    <option [value]="lang.id">{{ lang.label }}</option>
+                  }
+                </select>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="tpl-coding-starter">Starter code</label>
+              <textarea
+                id="tpl-coding-starter"
+                class="form-textarea mono"
+                rows="10"
+                formControlName="coding_starter"
+                spellcheck="false"
+              ></textarea>
+            </div>
+
+            <div class="form-group">
+              <label for="tpl-coding-tests">Public test cases (JSON array)</label>
+              <textarea
+                id="tpl-coding-tests"
+                class="form-textarea mono"
+                rows="8"
+                formControlName="coding_tests_json"
+                spellcheck="false"
+                placeholder='[{"input":"1 2","expectedOutput":"3"}]'
+              ></textarea>
+              @if (form.controls.coding_tests_json.invalid && form.controls.coding_tests_json.touched) {
+                <span class="field-error" role="alert">
+                  Use a JSON array of objects with string input and expectedOutput fields.
+                </span>
+              }
+            </div>
+          </section>
+        }
+
         <div class="form-actions">
           <button type="button" class="btn-text" (click)="closeForm()" [disabled]="isSaving()">
             Cancel

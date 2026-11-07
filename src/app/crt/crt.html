@@ -11,7 +11,7 @@
   </header>
 
   @if (loading()) {
-    <p class="status" role="status">Loading your learning paths...</p>
+    <p class="status" role="status">Loading your learning paths and readiness scores...</p>
   } @else if (loadError()) {
     <div class="banner" role="alert">
       <p>{{ loadError() }}</p>
@@ -25,7 +25,13 @@
     <ul class="path-list">
       @for (item of paths(); track item.path.id) {
         <li class="path-card">
-          <h2>{{ item.path.title }}</h2>
+          <div class="path-heading">
+            <h2>{{ item.path.title }}</h2>
+            <div class="readiness">
+              <span class="readiness-value">{{ item.readiness.score }}/100</span>
+              <span class="readiness-label">Readiness</span>
+            </div>
+          </div>
 
           @if (item.path.description) {
             <p>{{ item.path.description }}</p>

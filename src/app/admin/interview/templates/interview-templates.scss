@@ -38,3 +38,34 @@
   font-family: ui-monospace, 'Cascadia Code', 'Segoe UI Mono', monospace;
   font-size: 0.82rem;
 }
+
+.coding-panel {
+  margin: 0 0 20px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--card) 92%, var(--navy));
+}
+
+.coding-panel h3 {
+  margin: 0 0 8px;
+  color: var(--navy);
+  font-size: 1rem;
+}
+
+.coding-help {
+  margin: 0 0 14px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.coding-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 14px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--navy);
+}

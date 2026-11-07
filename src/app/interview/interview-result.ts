@@ -139,6 +139,11 @@ import {
                       <h3>{{ item.competency }}</h3>
                       <p>{{ scoreText(item.score) }}/100</p>
                     </div>
+                    @if (isCodingCompetency(item.competency)) {
+                      <p class="coding-outcome" [class.ok]="item.score >= 100" role="status">
+                        {{ codingOutcomeLabel(item.score) }}
+                      </p>
+                    }
                     <div class="track" role="progressbar" aria-valuemin="0" aria-valuemax="100" [attr.aria-valuenow]="bar(item.score)" [attr.aria-label]="item.competency">
                       <span [style.width.%]="bar(item.score)"></span>
                     </div>
@@ -260,6 +265,15 @@ import {
     .score-head p { color: var(--navy); font-weight: 800; }
     .track { height: 8px; margin-top: 8px; border-radius: 99px; background: #eceaf3; overflow: hidden; }
     .track span { display: block; height: 100%; border-radius: inherit; background: #65469b; }
+    .coding-outcome {
+      margin-top: 6px;
+      color: #991b1b;
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+    }
+    .coding-outcome.ok { color: #166534; }
     .feedback { color: var(--text); }
     .evidence { font-size: 14px; }
     .notes { list-style: disc; padding-left: 20px; }
@@ -368,6 +382,15 @@ export class InterviewResult {
 
   scoreText(score: number): string {
     return formatScore(score);
+  }
+
+  isCodingCompetency(name: string): boolean {
+    return name.trim().toLowerCase() === 'coding';
+  }
+
+  codingOutcomeLabel(score: number): string {
+    if (score >= 100) return 'Public tests: passed';
+    return 'Public tests: not fully passed';
   }
 
   bar(score: number): number {

@@ -244,7 +244,7 @@ export class InterviewHistory implements OnInit {
   }
 
   openFeedback(sessionId: string): void {
-    void this.router.navigate(['/interview/session', sessionId, 'feedback']);
+    void this.router.navigate(['/interview/session', sessionId, 'result']);
   }
 
   resume(sessionId: string): void {
