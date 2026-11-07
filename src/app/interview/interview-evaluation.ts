@@ -104,6 +104,7 @@ export interface InterviewEvaluationResponse {
   summary: string;
   strengths: string[];
   improvements: string[];
+  tips: string[];
   evaluatedAt: string | null;
   competencies: { competency: string; score: number; feedback: string; evidence: string }[];
 }
@@ -126,6 +127,7 @@ export function parseInterviewEvaluationResponse(value: unknown): InterviewEvalu
     summary: summary.trim(),
     strengths,
     improvements,
+    tips: practiceTips(value['tips']),
     evaluatedAt: typeof evaluatedAt === 'string' ? evaluatedAt : null,
     competencies,
   };
@@ -185,6 +187,7 @@ export function parseEvaluationSnapshot(
     summary: typeof summary === 'string' && summary.trim() ? summary.trim() : null,
     strengths: textList(sessionRow['evaluation_strengths']) ?? [],
     improvements: textList(sessionRow['evaluation_improvements']) ?? [],
+    tips: practiceTips(sessionRow['evaluation_tips']),
     evaluatedAt: typeof evaluatedAt === 'string' ? evaluatedAt : null,
     claimedAt: typeof claimedAt === 'string' ? claimedAt : null,
     competencies,
@@ -236,6 +239,24 @@ function embeddedTemplate(value: unknown): { title: string; kind: InterviewTempl
   const duration = typeof row['duration_minutes'] === 'number' ? row['duration_minutes'] : Number(row['duration_minutes']);
   if (!Number.isInteger(duration) || duration <= 0) return null;
   return { title: row['title'], kind: row['kind'], durationMinutes: duration };
+}
+
+/** Show a tip list only when a saved evaluation has 3–5 usable tips. */
+export function practiceTips(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const items: string[] = [];
+  for (const item of value) {
+    if (typeof item !== 'string') return [];
+    const text = item.trim().replace(/\s+/g, ' ');
+    if (!text || text.length > 400) return [];
+    const key = text.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    items.push(text);
+  }
+  if (items.length < 3 || items.length > 5) return [];
+  return items;
 }
 
 function textList(value: unknown): string[] | null {

@@ -808,6 +808,8 @@ export interface InterviewEvaluationSnapshot {
   summary: string | null;
   strengths: string[];
   improvements: string[];
+  /** Empty for evaluations saved before practice tips existed. */
+  tips: string[];
   evaluatedAt: string | null;
   claimedAt: string | null;
   competencies: InterviewCompetencyScore[];

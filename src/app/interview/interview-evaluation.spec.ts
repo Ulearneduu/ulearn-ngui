@@ -7,6 +7,7 @@ import {
   formatScore,
   parseEvaluationSnapshot,
   parseInterviewEvaluationResponse,
+  practiceTips,
   scoreBarPercent,
   shouldPollEvaluation,
   shouldStartEvaluation,
@@ -69,6 +70,7 @@ test('the results snapshot uses saved scores and keeps the transcript in order',
   assert.equal(snapshot.competencies[0]?.feedback, 'Both people were included.');
   assert.deepEqual(snapshot.strengths, ['Named a specific action.']);
   assert.deepEqual(snapshot.improvements, ['State what changed afterward.']);
+  assert.deepEqual(snapshot.tips, []);
   assert.deepEqual(snapshot.turns.map((turn) => turn.seq), [1, 2]);
   assert.equal(scoreBarPercent(snapshot.competencies[0]?.score ?? 0), 80);
   assert.equal(formatScore(75), '75');
@@ -154,6 +156,60 @@ test('the function response is accepted only when it has saved score fields', ()
     ],
   });
   assert.equal(parsed?.competencies[0]?.score, 70);
+  assert.deepEqual(parsed?.tips, []);
   assert.equal(parseInterviewEvaluationResponse({ status: 'completed', overallScore: 140 }), null);
   assert.equal(parseInterviewEvaluationResponse({ status: 'processing' }), null);
+});
+
+test('saved practice tips survive a reload and older scorecards stay usable', () => {
+  const saved = [
+    'Explain your decision-making process step by step.',
+    '  Support the communication answer with one specific example.  ',
+    'Use the STAR method to structure the teamwork answer.',
+  ];
+  const snapshot = parseEvaluationSnapshot({
+    ...sessionRow,
+    evaluation_tips: saved,
+  }, [], turns);
+  assert.deepEqual(snapshot?.tips, [
+    'Explain your decision-making process step by step.',
+    'Support the communication answer with one specific example.',
+    'Use the STAR method to structure the teamwork answer.',
+  ]);
+
+  const again = parseEvaluationSnapshot({
+    ...sessionRow,
+    evaluation_tips: snapshot?.tips,
+  }, [], turns);
+  assert.deepEqual(again?.tips, snapshot?.tips);
+
+  const legacy = parseEvaluationSnapshot(sessionRow, [], turns);
+  assert.deepEqual(legacy?.tips, []);
+  assert.equal(legacy?.summary, 'A clear example with a missing result.');
+  assert.deepEqual(practiceTips(['Only one tip', 'Second tip']), []);
+  assert.deepEqual(practiceTips([
+    'Explain the decision.',
+    'Explain the decision.',
+    'Support the example.',
+    'State the result.',
+  ]), [
+    'Explain the decision.',
+    'Support the example.',
+    'State the result.',
+  ]);
+
+  const response = parseInterviewEvaluationResponse({
+    status: 'completed',
+    evalVersion: 'INT008-v1',
+    overallScore: 70,
+    summary: 'Brief and relevant.',
+    strengths: ['Named an action.'],
+    improvements: ['Add the result.'],
+    tips: snapshot?.tips,
+    evaluatedAt: '2026-11-05T08:13:00.000Z',
+    competencies: [
+      { competency: 'Communication', score: 70, feedback: 'Clear.', evidence: 'Two sentences.' },
+    ],
+  });
+  assert.deepEqual(response?.tips, snapshot?.tips);
 });

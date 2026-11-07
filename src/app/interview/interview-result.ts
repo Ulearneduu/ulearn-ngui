@@ -173,6 +173,21 @@ import {
               </ul>
             </section>
           }
+
+          @if (data.tips.length > 0) {
+            <section class="block next-steps" aria-labelledby="next-steps-heading">
+              <h2 id="next-steps-heading">Your Next Steps</h2>
+              <p class="next-subtitle">Personalized recommendations based on your interview performance.</p>
+              <ol class="tips">
+                @for (tip of data.tips; track tip; let index = $index) {
+                  <li>
+                    <span class="tip-index">{{ index + 1 }}</span>
+                    <p>{{ tip }}</p>
+                  </li>
+                }
+              </ol>
+            </section>
+          }
         }
 
         <section class="block transcript" aria-labelledby="transcript-heading">
@@ -249,6 +264,37 @@ import {
     .evidence { font-size: 14px; }
     .notes { list-style: disc; padding-left: 20px; }
     .notes li { margin-top: 8px; line-height: 1.5; font-weight: 700; }
+    .next-steps { background: #f8f6fc; border-color: #d9d0ea; }
+    .next-subtitle { margin-top: 8px; color: #626277; font-weight: 700; line-height: 1.5; }
+    .tips {
+      display: grid;
+      gap: 12px;
+      margin: 16px 0 0;
+      padding: 0;
+      list-style: none;
+    }
+    .tips li {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 14px 16px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: #fff;
+    }
+    .tips p { line-height: 1.5; font-weight: 700; }
+    .tip-index {
+      display: grid;
+      place-items: center;
+      flex: 0 0 28px;
+      width: 28px;
+      height: 28px;
+      border-radius: 99px;
+      background: #65469b;
+      color: #fff;
+      font-size: 13px;
+      font-weight: 800;
+    }
     .transcript li { padding: 14px 16px; border-radius: 16px; background: #f7f8fc; }
     .transcript li.student { background: #f3eff9; }
     .who { margin-bottom: 6px; color: var(--purple); font-size: 13px; font-weight: 800; }
@@ -282,6 +328,7 @@ import {
       h1 { font-size: 26px; }
       .score-figure { min-width: 0; }
       .primary, .secondary { width: 100%; margin-right: 0; }
+      .tips li { padding: 12px; }
     }
   `,
 })

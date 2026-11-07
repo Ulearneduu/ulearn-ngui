@@ -68,6 +68,8 @@ export interface ParsedEvaluation {
   strengths: string[];
   improvements: string[];
   competencies: ApplicableScore[];
+  /** Raw model tips. Invalid values are replaced later and do not fail scoring. */
+  modelTips: unknown;
 }
 
 export type EvaluationPlan =
@@ -221,7 +223,174 @@ export function parseEvaluationPayload(raw: string, expected: readonly string[])
   if (applicable.length === 0) return { ok: false, reason: 'no_applicable' };
   const overall = aggregateOverallScore(applicable.map((row) => row.score));
   if (overall === null) return { ok: false, reason: 'score_range' };
-  return { ok: true, evaluation: { summary, strengths, improvements, competencies: applicable } };
+  return {
+    ok: true,
+    evaluation: { summary, strengths, improvements, competencies: applicable, modelTips: parsed['tips'] },
+  };
+}
+
+const TIP_STOP_WORDS = new Set([
+  'about', 'after', 'again', 'answer', 'answers', 'before', 'could', 'example', 'examples',
+  'explain', 'include', 'practice', 'should', 'specific', 'state', 'their', 'there', 'these',
+  'thing', 'using', 'would', 'your',
+]);
+
+/** Applicable competencies, lowest score first. N/A rows use a negative score and are omitted. */
+export function lowestApplicableCompetencies(scores: readonly ApplicableScore[]): ApplicableScore[] {
+  return scores
+    .filter((row) => Number.isFinite(row.score) && row.score >= 0 && row.score <= 100 && row.competency.trim())
+    .map((row) => ({ ...row, competency: row.competency.trim() }))
+    .sort((left, right) => left.score - right.score || left.competency.localeCompare(right.competency));
+}
+
+/**
+ * Trim, drop blanks, and collapse case-insensitive duplicates.
+ * Returns null when the list cannot be used as 3–5 tips.
+ * Extra valid tips are kept only up to 5.
+ */
+export function normalizePracticeTips(raw: unknown): string[] | null {
+  if (!Array.isArray(raw)) return null;
+  const seen = new Set<string>();
+  const tips: string[] = [];
+  for (const item of raw) {
+    if (typeof item !== 'string') return null;
+    const text = item.trim().replace(/\s+/g, ' ');
+    if (!text) continue;
+    if (text.length > 400) return null;
+    const key = text.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    tips.push(text);
+    if (tips.length === 5) break;
+  }
+  if (tips.length < 3) return null;
+  return tips;
+}
+
+export function resolvePracticeTips(input: {
+  rawTips: unknown;
+  competencies: readonly ApplicableScore[];
+  strengths?: readonly string[];
+  improvements?: readonly string[];
+}): string[] {
+  const avoid = new Set(
+    [...(input.strengths ?? []), ...(input.improvements ?? [])]
+      .map((item) => item.trim().toLowerCase())
+      .filter(Boolean)
+  );
+  const normalized = normalizePracticeTips(input.rawTips);
+  if (normalized) {
+    const fresh = normalized.filter((tip) => !avoid.has(tip.toLowerCase()));
+    if (fresh.length >= 3 && tipsRelateToLowest(fresh, input.competencies)) {
+      return fresh.slice(0, 5);
+    }
+  }
+  return fallbackPracticeTips(input.competencies, avoid);
+}
+
+export function fallbackPracticeTips(
+  competencies: readonly ApplicableScore[],
+  avoid: ReadonlySet<string> = new Set()
+): string[] {
+  const ranked = lowestApplicableCompetencies(competencies);
+  const tips: string[] = [];
+  const seen = new Set<string>();
+  const push = (tip: string): void => {
+    const text = tip.trim().replace(/\s+/g, ' ');
+    const key = text.toLowerCase();
+    if (!text || text.length > 400 || seen.has(key) || avoid.has(key) || tips.length >= 5) return;
+    seen.add(key);
+    tips.push(text);
+  };
+
+  const focusCount = ranked.length === 0 ? 0 : Math.min(3, Math.max(1, Math.ceil(ranked.length / 2)));
+  const sources = ranked.slice(0, focusCount);
+  for (let pass = 0; pass < 3 && tips.length < 5; pass += 1) {
+    for (const row of sources) {
+      const actions = practiceActions(row.competency);
+      const action = actions[pass];
+      if (action) push(action);
+      if (pass === 0) push(evidenceTip(row));
+    }
+  }
+  if (tips.length < 3) {
+    const name = sources[0]?.competency ?? 'your weakest answer';
+    push(`Support your ${name} answers with one specific example from the work you did.`);
+    push(`Explain the decision you made in ${name} before you state the conclusion.`);
+    push(`State the result of your action when you practice ${name}.`);
+  }
+  return tips.slice(0, 5);
+}
+
+function tipsRelateToLowest(tips: readonly string[], competencies: readonly ApplicableScore[]): boolean {
+  const ranked = lowestApplicableCompetencies(competencies);
+  if (ranked.length === 0) return false;
+  const focusCount = Math.min(3, Math.max(1, Math.ceil(ranked.length / 2)));
+  const focus = ranked.slice(0, focusCount);
+  const tokens = new Set<string>();
+  for (const row of focus) {
+    for (const token of tipTokens(`${row.competency} ${row.feedback} ${row.evidence}`)) tokens.add(token);
+  }
+  if (tokens.size === 0) return false;
+  const matched = tips.filter((tip) => tipTokens(tip).some((token) => tokens.has(token)));
+  return matched.length >= Math.min(2, tips.length);
+}
+
+function practiceActions(competency: string): string[] {
+  const name = competency.toLowerCase();
+  if (/technical|algorithm|coding|depth|knowledge|system/.test(name)) {
+    return [
+      `State the time and space complexity when you explain a solution for ${competency}.`,
+      `Explain why you chose the data structure or algorithm while practicing ${competency}.`,
+      `Walk through one concrete input and output when you answer a ${competency} question.`,
+    ];
+  }
+  if (/problem|decision|aptitude|analytical/.test(name)) {
+    return [
+      `Explain your decision-making process step by step when you answer ${competency} questions.`,
+      `Name the constraint you used and how it changed the answer in ${competency}.`,
+      `After you reach an answer in ${competency}, check one edge case out loud.`,
+    ];
+  }
+  if (/team|collab|leader|behavior|behaviour|ownership|conflict/.test(name)) {
+    return [
+      `Use the STAR method to structure behavioral answers for ${competency}.`,
+      `Support your ${competency} examples with a measurable outcome.`,
+      `Separate what you personally did from what the group did when you practice ${competency}.`,
+    ];
+  }
+  if (/communicat|clarity|structure/.test(name)) {
+    return [
+      `Lead with the direct point, then support ${competency} answers with one specific example.`,
+      `Replace general claims in ${competency} answers with the action you took.`,
+      `Keep each ${competency} answer to one situation, one action, and one result.`,
+    ];
+  }
+  if (/confidence|professional/.test(name)) {
+    return [
+      `State your recommendation first, then give one reason, when you practice ${competency}.`,
+      `If you are unsure in a ${competency} answer, say what you know and what you would verify next.`,
+      `End each ${competency} answer with the outcome you would own.`,
+    ];
+  }
+  return [
+    `Support your ${competency} answers with a specific example from the work you did.`,
+    `Explain what you decided and why when you practice ${competency}.`,
+    `State the result of your action when you answer a ${competency} question.`,
+  ];
+}
+
+function evidenceTip(row: ApplicableScore): string {
+  const evidence = row.evidence.trim().replace(/\s+/g, ' ');
+  if (evidence.length < 12 || evidence.length > 180) return '';
+  return `When you practice ${row.competency}, revisit this moment and make the next step explicit: ${evidence}`;
+}
+
+function tipTokens(value: string): string[] {
+  return value
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((token) => token.length >= 5 && !TIP_STOP_WORDS.has(token));
 }
 
 export function buildEvaluationPrompt(input: {
@@ -245,8 +414,9 @@ export function buildEvaluationPrompt(input: {
     'Score only these competencies. Use each name exactly once:',
     names,
     'JSON shape:',
-    '{"summary":"string","strengths":["string"],"improvements":["string"],"competencies":[{"name":"string","applicable":true,"score":0,"feedback":"string","evidence":"string"}]}',
+    '{"summary":"string","strengths":["string"],"improvements":["string"],"tips":["string"],"competencies":[{"name":"string","applicable":true,"score":0,"feedback":"string","evidence":"string"}]}',
     'summary is one short paragraph. strengths and improvements each contain 1 to 6 specific observations from this transcript.',
+    'tips contains 3 to 5 distinct practice recommendations for the lowest-scoring applicable competencies. Each tip is one sentence about what to practice. Do not repeat strengths or improvements. Do not write a tip for a competency you marked applicable false. Do not claim the candidate did something that is not in the transcript.',
     'score is an integer from 0 to 100. When applicable is false, omit the score or set it to null.',
     'evidence must quote or describe a concrete moment from the transcript. feedback must say what to do differently or what worked.',
     context ? `Interview context, for the questions that were asked:\n${context}` : '',

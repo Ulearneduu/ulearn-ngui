@@ -75,9 +75,38 @@ test('Angular evaluation code does not carry provider or service-role secrets', 
   const result = read('src/app/interview/interview-result.ts');
   assert.match(result, /data\.competencies/);
   assert.match(result, /data\.turns/);
+  assert.match(result, /Your Next Steps/);
+  assert.match(result, /Personalized recommendations based on your interview performance\./);
+  assert.ok(result.indexOf('Generating your results') < result.indexOf('Your Next Steps'));
+  assert.ok(result.indexOf('Your Next Steps') < result.indexOf('Full interview transcript'));
+  assert.equal(result.includes('Use the STAR method to structure behavioral answers.'), false);
   assert.match(result, /@media \(max-width: 1024px\)/);
   assert.match(result, /@media \(max-width: 720px\)/);
   assert.equal(result.includes('score: 80'), false);
   const routes = read('src/app/app.routes.ts');
   assert.match(routes, /session\/:id\/result/);
+});
+
+test('practice tips are generated after scoring and only the evaluator can store them', () => {
+  const source = read('supabase/functions/interview-evaluate/index.ts');
+  const handler = source.slice(source.indexOf('Deno.serve'), source.indexOf('function readAiConfig'));
+  const parsedAt = handler.indexOf('parseEvaluationPayload');
+  const tipsAt = handler.indexOf('resolvePracticeTips');
+  const applyAt = handler.indexOf('applyEvaluation(');
+  assert.ok(parsedAt > 0 && tipsAt > parsedAt && applyAt > tipsAt);
+  assert.match(source, /p_tips: input\.tips/);
+  assert.match(source, /evaluation_tips/);
+  assert.match(source, /requireTips: outcome === 'completed'/);
+  const sql = read('supabase/migrations/20261107_interview_practice_tips.sql');
+  assert.match(sql, /ADD COLUMN IF NOT EXISTS evaluation_tips text\[\]/);
+  assert.match(sql, /interview_tips_valid/);
+  assert.match(sql, /REVOKE UPDATE \(evaluation_tips\) ON TABLE public\.interview_sessions FROM PUBLIC, anon, authenticated/);
+  assert.match(sql, /GRANT EXECUTE ON FUNCTION public\.apply_interview_evaluation\(uuid, text, text, jsonb, jsonb, jsonb, timestamptz, text\[\]\) TO service_role/);
+  assert.match(sql, /REVOKE ALL ON FUNCTION public\.apply_interview_evaluation\(uuid, text, text, jsonb, jsonb, jsonb, timestamptz, text\[\]\) FROM PUBLIC, anon, authenticated/);
+  assert.match(sql, /evaluation_tips = v_tips/);
+  assert.match(sql, /already_completed/);
+  assert.equal(read('supabase/migrations/20261105_interview_evaluation.sql').includes('evaluation_tips'), false);
+  const prompt = read('supabase/functions/_shared/interview-evaluate-policy.ts');
+  assert.match(prompt, /lowest-scoring applicable competencies/);
+  assert.equal(prompt.includes('overall_score is the unweighted arithmetic mean') || prompt.includes('The model overall_score is ignored'), true);
 });

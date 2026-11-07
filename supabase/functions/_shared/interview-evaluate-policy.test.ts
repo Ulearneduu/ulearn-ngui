@@ -6,10 +6,14 @@ import {
   aggregateOverallScore,
   buildEvaluationPrompt,
   competenciesForTemplate,
+  fallbackPracticeTips,
   formatTranscript,
+  lowestApplicableCompetencies,
+  normalizePracticeTips,
   parseEvaluationPayload,
   planEvaluation,
   requestEvaluationReply,
+  resolvePracticeTips,
   rowsToInsert,
 } from './interview-evaluate-policy.ts';
 import { providerUrl } from './interview-turn-policy.ts';
@@ -258,4 +262,67 @@ test('a provider failure can be retried without inventing a score', async () => 
   assert.equal(parsed.ok, true);
   if (!parsed.ok) return;
   assert.equal(aggregateOverallScore(parsed.evaluation.competencies.map((item) => item.score)), 70);
+});
+
+const TIP_SCORES = [
+  { competency: 'Communication', score: 70, feedback: 'The point was easy to follow.', evidence: 'Restated the goal before splitting the work.' },
+  { competency: 'Teamwork', score: 90, feedback: 'The example involved both people.', evidence: 'Asked both people to restate the goal.' },
+  { competency: 'Decision making', score: 40, feedback: 'The decision was stated without the outcome.', evidence: 'The candidate stopped at splitting the work.' },
+  { competency: 'Aptitude', score: -1, feedback: '', evidence: '' },
+];
+
+test('practice tips follow the lowest applicable competencies and ignore N/A rows', () => {
+  assert.deepEqual(
+    lowestApplicableCompetencies(TIP_SCORES).map((row) => row.competency),
+    ['Decision making', 'Communication', 'Teamwork']
+  );
+  const relevant = [
+    'Explain the decision making outcome you skipped.',
+    'Make the communication point before the example.',
+    'State the decision constraint you used.',
+  ];
+  assert.deepEqual(resolvePracticeTips({
+    rawTips: relevant,
+    competencies: TIP_SCORES,
+    strengths: ['The answer named a concrete action.'],
+    improvements: ['Add the result of the conversation.'],
+  }), relevant);
+
+  const duplicated = normalizePracticeTips([
+    relevant[0],
+    `  ${relevant[0]}  `,
+    relevant[1],
+    relevant[2],
+    relevant[2],
+  ]);
+  assert.deepEqual(duplicated, relevant);
+
+  assert.equal(normalizePracticeTips(['Only one tip', '   ']), null);
+  assert.equal(normalizePracticeTips({ tips: true }), null);
+  assert.equal(normalizePracticeTips(['One', 'Two', 3]), null);
+
+  const fallback = resolvePracticeTips({ rawTips: ['', 'not-enough'], competencies: TIP_SCORES });
+  assert.ok(fallback.length >= 3 && fallback.length <= 5);
+  assert.equal(fallback.some((tip) => tip.includes('Decision making')), true);
+  assert.equal(fallback.some((tip) => /aptitude/i.test(tip)), false);
+  assert.equal(fallback.some((tip) => tip.includes('Teamwork')), false);
+  assert.deepEqual(fallback, fallbackPracticeTips(TIP_SCORES));
+  assert.deepEqual(fallback, resolvePracticeTips({ rawTips: null, competencies: TIP_SCORES }));
+
+  const unrelated = [
+    'Keep using teamwork examples with both people.',
+    'Describe how teamwork split the work.',
+    'Repeat the teamwork goal with both people.',
+  ];
+  const replaced = resolvePracticeTips({ rawTips: unrelated, competencies: TIP_SCORES });
+  assert.equal(replaced.some((tip) => tip.includes('Decision making')), true);
+  assert.equal(replaced.some((tip) => /aptitude/i.test(tip)), false);
+
+  const repeated = resolvePracticeTips({
+    rawTips: [fallback[0], fallback[0], fallback[0]],
+    competencies: TIP_SCORES,
+    improvements: [fallback[0] ?? ''],
+  });
+  assert.equal(repeated.includes(fallback[0] ?? ''), false);
+  assert.ok(repeated.length >= 3 && repeated.length <= 5);
 });

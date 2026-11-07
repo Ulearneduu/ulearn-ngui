@@ -442,7 +442,7 @@ export class InterviewCatalogService {
   async getOwnEvaluation(sessionId: string): Promise<InterviewEvaluationSnapshot | null> {
     const { data, error } = await supabase
       .from('interview_sessions')
-      .select('id, status, template_id, prompt_version, started_at, ended_at, overall_score, evaluation_status, eval_version, evaluated_at, evaluation_summary, evaluation_strengths, evaluation_improvements, evaluation_claimed_at, interview_templates(title, kind, duration_minutes)')
+      .select('id, status, template_id, prompt_version, started_at, ended_at, overall_score, evaluation_status, eval_version, evaluated_at, evaluation_summary, evaluation_strengths, evaluation_improvements, evaluation_tips, evaluation_claimed_at, interview_templates(title, kind, duration_minutes)')
       .eq('id', sessionId)
       .maybeSingle();
     if (error) throw error;
