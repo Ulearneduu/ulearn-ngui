@@ -20,10 +20,13 @@
         <li class="attempt-card">
           <p class="status-line">{{ statusLabel(attempt.status) }}</p>
           <p>Date: {{ formatDate(attempt.started_at) }}</p>
+          <p>Type: {{ attempt.kind === 'mock' ? 'Mock Test' : 'Practice' }}</p>
+          <p>Path: {{ attempt.path_title ?? 'Path unavailable' }}</p>
+          <p>Module: {{ attempt.module_title ?? 'All modules' }}</p>
           <p>Score: {{ scoreLabel(attempt) }}</p>
           <p>Duration: {{ durationLabel(attempt) }}</p>
           @if (attempt.status === 'submitted') {
-            <a class="btn-primary" [routerLink]="['/crt/history', attempt.id, 'review']">Review</a>
+            <a class="btn-primary" [routerLink]="['/crt/history', attempt.id]">Review</a>
           }
         </li>
       }

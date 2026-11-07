@@ -16,6 +16,10 @@ import {
   type AnswerPlan,
   type StoredTurn,
 } from '../_shared/interview-turn-policy.ts';
+import {
+  parseTemplateVersionNumber,
+  pickTemplateFacts,
+} from '../_shared/interview-template-version.ts';
 
 /**
  * interview-turn
@@ -75,7 +79,7 @@ Deno.serve(async (req) => {
 
     const sessionResult = await userClient
       .from('interview_sessions')
-      .select('id, user_id, status, template_id, started_at')
+      .select('id, user_id, status, template_id, prompt_version, template_version_id, started_at')
       .eq('id', sessionId)
       .maybeSingle();
     if (sessionResult.error) return fail(500, 'SESSION_LOAD_FAILED', 'Could not open this interview.', sessionId);
@@ -103,7 +107,7 @@ Deno.serve(async (req) => {
       return fail(409, 'SESSION_CLOSED', 'This interview is already finished.', sessionId);
     }
 
-    const template = await readTemplate(userClient, session.templateId);
+    const template = await readSessionTemplate(userClient, session);
     if (!template) return fail(409, 'SESSION_CLOSED', 'This interview cannot continue.', sessionId);
     if (already.type === 'blocked') {
       return fail(409, 'TURN_CONFLICT', 'That answer conflicted with another submission. Refresh the conversation and try again.', sessionId);
@@ -268,16 +272,74 @@ async function loadTurns(
   return { ok: true, turns };
 }
 
-async function readTemplate(
+async function readSessionTemplate(
   userClient: SupabaseClient,
-  templateId: string
+  session: {
+    templateId: string;
+    promptVersion: string;
+    templateVersionId: string | null;
+  }
 ): Promise<{ systemPrompt: string; durationMinutes: number } | null> {
-  const visible = await templateFacts(userClient, templateId);
-  if (visible) return visible;
+  const fromSnapshot = await versionFacts(userClient, session);
+  if (fromSnapshot) return fromSnapshot;
 
   const privileged = serviceDb();
+  if (privileged) {
+    const privilegedSnapshot = await versionFacts(privileged, session);
+    if (privilegedSnapshot) return privilegedSnapshot;
+  }
+
+  // Legacy sessions (slug:createdAt prompt_version, no template_version_id).
+  const visible = await liveTemplateFacts(userClient, session.templateId);
+  if (visible) return visible;
   if (!privileged) return null;
-  return templateFacts(privileged, templateId);
+  return liveTemplateFacts(privileged, session.templateId);
+}
+
+async function versionFacts(
+  client: SupabaseClient,
+  session: {
+    templateId: string;
+    promptVersion: string;
+    templateVersionId: string | null;
+  }
+): Promise<{ systemPrompt: string; durationMinutes: number } | null> {
+  if (session.templateVersionId) {
+    const { data, error } = await client
+      .from('interview_template_versions')
+      .select('system_prompt, duration_minutes')
+      .eq('id', session.templateVersionId)
+      .maybeSingle();
+    if (!error) {
+      const facts = pickTemplateFacts(data, positiveDurationMinutes);
+      if (facts) return facts;
+    }
+  }
+
+  const version = parseTemplateVersionNumber(session.promptVersion);
+  if (version === null) return null;
+
+  const { data, error } = await client
+    .from('interview_template_versions')
+    .select('system_prompt, duration_minutes')
+    .eq('template_id', session.templateId)
+    .eq('version', version)
+    .maybeSingle();
+  if (error) return null;
+  return pickTemplateFacts(data, positiveDurationMinutes);
+}
+
+async function liveTemplateFacts(
+  client: SupabaseClient,
+  templateId: string
+): Promise<{ systemPrompt: string; durationMinutes: number } | null> {
+  const { data, error } = await client
+    .from('interview_templates')
+    .select('system_prompt, duration_minutes')
+    .eq('id', templateId)
+    .maybeSingle();
+  if (error) return null;
+  return pickTemplateFacts(data, positiveDurationMinutes);
 }
 
 function serviceDb(): SupabaseClient | null {
@@ -448,22 +510,6 @@ async function markClaimCompleted(
     .eq('client_turn_id', clientTurnId);
 }
 
-async function templateFacts(
-  client: SupabaseClient,
-  templateId: string
-): Promise<{ systemPrompt: string; durationMinutes: number } | null> {
-  const { data, error } = await client
-    .from('interview_templates')
-    .select('system_prompt, duration_minutes')
-    .eq('id', templateId)
-    .maybeSingle();
-  if (error || !data) return null;
-  const prompt = typeof data.system_prompt === 'string' ? data.system_prompt.trim() : '';
-  const duration = positiveDurationMinutes(data.duration_minutes);
-  if (!prompt || duration === null) return null;
-  return { systemPrompt: prompt, durationMinutes: duration };
-}
-
 async function finishIfExpired(
   userClient: SupabaseClient,
   sessionId: string
@@ -526,6 +572,8 @@ function asSession(value: unknown): {
   userId: string;
   status: string;
   templateId: string;
+  promptVersion: string;
+  templateVersionId: string | null;
   startedAt: string;
 } | null {
   if (!value || typeof value !== 'object') return null;
@@ -535,15 +583,19 @@ function asSession(value: unknown): {
     typeof row['user_id'] !== 'string' ||
     typeof row['status'] !== 'string' ||
     typeof row['template_id'] !== 'string' ||
+    typeof row['prompt_version'] !== 'string' ||
     typeof row['started_at'] !== 'string'
   ) {
     return null;
   }
+  const versionId = row['template_version_id'];
   return {
     id: row['id'],
     userId: row['user_id'],
     status: row['status'],
     templateId: row['template_id'],
+    promptVersion: row['prompt_version'],
+    templateVersionId: typeof versionId === 'string' ? versionId : null,
     startedAt: row['started_at'],
   };
 }

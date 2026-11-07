@@ -46,6 +46,18 @@ test('the edge function authorizes before it calls the provider or inserts turns
   assert.match(source, /Deno\.env\.get\('OPENAI_API_KEY'\)/);
   assert.match(source, /gpt-6-luna/);
   assert.match(handler, /serviceDb\(\)/);
+  assert.match(handler, /readSessionTemplate/);
+  assert.match(handler, /template_version_id/);
+  assert.match(source, /interview_template_versions/);
+  assert.match(source, /parseTemplateVersionNumber/);
+  assert.match(source, /versionFacts/);
+  assert.match(source, /liveTemplateFacts/);
+  assert.equal(source.includes('async function readTemplate('), false);
+  const versionSql = read('supabase/migrations/20261106_interview_template_versions.sql');
+  assert.match(versionSql, /CREATE TABLE IF NOT EXISTS public\.interview_template_versions/);
+  assert.match(versionSql, /interview_templates_capture_version/);
+  assert.match(versionSql, /template_version_id/);
+  assert.match(versionSql, /finish_own_interview_session/);
   const sql = read('supabase/migrations/20261027_interview_turn_security.sql');
   assert.match(sql, /client_turn_id uuid/);
   assert.match(sql, /interview_turns_session_client_turn/);
@@ -79,6 +91,7 @@ test('Angular interview code does not select prompts or privileged keys', () => 
   const files = [
     'src/app/interview/interview-catalog.service.ts',
     'src/app/interview/interview-session.ts',
+    'src/app/interview/interview-voice.ts',
     'src/app/interview/interview-api.ts',
     'src/app/interview/interview.ts',
   ];

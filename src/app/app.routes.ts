@@ -128,7 +128,7 @@ export const routes: Routes = [
     loadComponent: () => import('./crt/history/crt-history').then(m => m.CrtHistory)
   },
   {
-    path: 'crt/history/:attemptId/review',
+    path: 'crt/history/:attemptId',
     canActivate: [authGuard, blockExamOnlyGuard, featurePermissionGuard],
     data: { permission: 'crt.access' },
     loadComponent: () => import('./crt/review/crt-review').then(m => m.CrtReview)

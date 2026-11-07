@@ -1,0 +1,195 @@
+<app-interview-admin-shell crumb="Templates">
+  <div class="page-head">
+    <h1>Interview templates</h1>
+  </div>
+
+  <p class="state note">
+    Saving creates a new immutable prompt version. New sessions use the latest version; sessions already
+    in progress keep the snapshot they started with.
+  </p>
+
+  @if (isLoading()) {
+    <p class="state" role="status">Loading interview templatesÔÇª</p>
+  } @else if (loadError(); as errorMessage) {
+    <div class="empty" role="alert">
+      <p class="state error">{{ errorMessage }}</p>
+      <button type="button" class="btn-text" (click)="loadTemplates()">Retry</button>
+    </div>
+  } @else {
+    <div class="toolbar">
+      <label class="search">
+        <span class="visually-hidden">Search templates</span>
+        <input
+          type="search"
+          placeholder="SearchÔÇª"
+          [value]="query()"
+          (input)="onSearch($event)"
+        />
+      </label>
+
+      <div class="filters" role="group" aria-label="Template status">
+        @for (option of filters; track option.id) {
+          <button
+            type="button"
+            class="filter-btn"
+            [class.active]="statusFilter() === option.id"
+            (click)="setFilter(option.id)"
+          >
+            {{ option.label }}
+          </button>
+        }
+      </div>
+
+      <button type="button" class="btn-add" (click)="openCreate()">+ Create template</button>
+    </div>
+
+    @if (templates().length === 0) {
+      <div class="empty">
+        <p>No interview templates yet.</p>
+        <button type="button" class="btn-text" (click)="openCreate()">Create the first template</button>
+      </div>
+    } @else if (visibleTemplates().length === 0) {
+      <p class="empty">No templates match your search.</p>
+    } @else {
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Title</th>
+              <th>Kind</th>
+              <th>Duration</th>
+              <th>Status</th>
+              <th>Prompt version</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of visibleTemplates(); track row.id) {
+              <tr>
+                <td>
+                  <span class="title-link">{{ row.title }}</span>
+                  <span class="meta-line">{{ row.slug }}</span>
+                </td>
+                <td>{{ row.kind }}</td>
+                <td>{{ row.duration_minutes }} min</td>
+                <td>
+                  <span class="status-pill" [attr.data-tone]="row.status">{{ row.status }}</span>
+                </td>
+                <td class="mono clamp">{{ versionLabel(row) }}</td>
+                <td>
+                  <div class="row-actions">
+                    <button type="button" (click)="openEdit(row.id)">Edit</button>
+                  </div>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+
+    @if (showForm()) {
+      <form class="form-panel" #formHost [formGroup]="form" (ngSubmit)="save()">
+        <h2>{{ isCreateMode() ? 'Create interview template' : 'Edit interview template' }}</h2>
+
+        @if (isCreateMode()) {
+          <div class="form-group">
+            <label for="tpl-slug">Slug *</label>
+            <input
+              id="tpl-slug"
+              class="form-input"
+              type="text"
+              formControlName="slug"
+              placeholder="hr-behavioral"
+              autocomplete="off"
+            />
+            @if (form.controls.slug.invalid && form.controls.slug.touched) {
+              <span class="field-error" role="alert">
+                Use lowercase letters, numbers, and hyphens (e.g. sde-technical).
+              </span>
+            }
+          </div>
+        }
+
+        <div class="form-group">
+          <label for="tpl-title">Title *</label>
+          <input id="tpl-title" class="form-input" type="text" formControlName="title" />
+          @if (form.controls.title.invalid && form.controls.title.touched) {
+            <span class="field-error" role="alert">Enter a title of at least 2 characters.</span>
+          }
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="tpl-kind">Kind *</label>
+            <select id="tpl-kind" class="form-select" formControlName="kind">
+              @for (option of kindOptions; track option.value) {
+                <option [value]="option.value">{{ option.label }}</option>
+              }
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="tpl-duration">Duration (minutes) *</label>
+            <input
+              id="tpl-duration"
+              class="form-input"
+              type="number"
+              min="1"
+              step="1"
+              formControlName="duration_minutes"
+            />
+            @if (form.controls.duration_minutes.invalid && form.controls.duration_minutes.touched) {
+              <span class="field-error" role="alert">Enter a whole number greater than zero.</span>
+            }
+          </div>
+
+          <div class="form-group">
+            <label for="tpl-status">Status *</label>
+            <select id="tpl-status" class="form-select" formControlName="status">
+              <option value="draft">Draft</option>
+              <option value="published">Published</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="tpl-prompt">System prompt *</label>
+          <textarea
+            id="tpl-prompt"
+            class="form-textarea"
+            rows="8"
+            formControlName="system_prompt"
+            placeholder="Interviewer persona and instructionsÔÇª"
+          ></textarea>
+          @if (form.controls.system_prompt.invalid && form.controls.system_prompt.touched) {
+            <span class="field-error" role="alert">Enter a system prompt of at least 20 characters.</span>
+          }
+        </div>
+
+        <div class="form-group">
+          <label for="tpl-rubric">Rubric JSON *</label>
+          <textarea
+            id="tpl-rubric"
+            class="form-textarea mono"
+            rows="10"
+            formControlName="rubric_json"
+            spellcheck="false"
+          ></textarea>
+          @if (form.controls.rubric_json.invalid && form.controls.rubric_json.touched) {
+            <span class="field-error" role="alert">Enter valid JSON object for the rubric.</span>
+          }
+        </div>
+
+        <div class="form-actions">
+          <button type="button" class="btn-text" (click)="closeForm()" [disabled]="isSaving()">
+            Cancel
+          </button>
+          <button type="submit" class="btn-text" [disabled]="isSaving()">
+            {{ isSaving() ? 'SavingÔÇª' : 'Save template' }}
+          </button>
+        </div>
+      </form>
+    }
+  }
+</app-interview-admin-shell>

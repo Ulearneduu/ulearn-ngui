@@ -21,6 +21,7 @@ import {
   parseInterviewEvaluationResponse,
   type InterviewEvaluationResponse,
 } from './interview-evaluation';
+import { formatTemplateVersionNumber } from './interview-prompt-version';
 import { positiveDurationMinutes } from './interview-timer';
 
 const HISTORY_LIST_LIMIT = 50;
@@ -45,7 +46,12 @@ interface SessionRow {
   prompt_version: string;
   started_at: string;
   ended_at?: string | null;
+  template_version_id?: string | null;
   interview_templates:
+    | { title: string; kind: string; duration_minutes: number | string }
+    | { title: string; kind: string; duration_minutes: number | string }[]
+    | null;
+  interview_template_versions?:
     | { title: string; kind: string; duration_minutes: number | string }
     | { title: string; kind: string; duration_minutes: number | string }[]
     | null;
@@ -61,8 +67,8 @@ interface HistorySessionRow {
 }
 
 /**
- * Templates have no prompt-version column yet. The session still requires
- * prompt_version, so store the published row identity the student started.
+ * @deprecated Legacy label used before INT-009 version snapshots.
+ * New sessions store the integer template version via formatTemplateVersionNumber.
  */
 export function interviewPromptVersion(template: Pick<InterviewTemplate, 'slug' | 'createdAt'>): string {
   return `${template.slug}:${template.createdAt}`;
@@ -112,7 +118,10 @@ function asTemplateRow(value: unknown): TemplateRow | null {
 }
 
 function embeddedTemplate(
-  value: SessionRow['interview_templates']
+  value:
+    | SessionRow['interview_templates']
+    | SessionRow['interview_template_versions']
+    | undefined
 ): { title: string; kind: string; duration_minutes: number } | null {
   const row = Array.isArray(value) ? value[0] : value;
   const duration = positiveDurationMinutes(row?.duration_minutes);
@@ -184,6 +193,7 @@ export class InterviewCatalogService {
 
   /**
    * Insert an in-progress session for the signed-in student.
+   * Pins prompt_version + template_version_id to the template's current snapshot.
    * Returns the new session id.
    */
   async startSession(template: InterviewTemplate): Promise<string> {
@@ -194,13 +204,19 @@ export class InterviewCatalogService {
       throw new Error('Sign in again to start an interview.');
     }
 
+    const version = await this.latestPublishedTemplateVersion(template.id);
+    if (!version) {
+      throw new Error('This interview is not available right now.');
+    }
+
     const { data, error } = await supabase
       .from('interview_sessions')
       .insert({
         user_id: userId,
         template_id: template.id,
         status: 'in_progress',
-        prompt_version: interviewPromptVersion(template),
+        prompt_version: formatTemplateVersionNumber(version.version),
+        template_version_id: version.id,
       })
       .select('id')
       .single();
@@ -210,6 +226,48 @@ export class InterviewCatalogService {
       throw new Error('The interview session was not created.');
     }
     return data['id'];
+  }
+
+  /** Latest published snapshot for a template (INT-009). */
+  private async latestPublishedTemplateVersion(
+    templateId: string
+  ): Promise<{ id: string; version: number } | null> {
+    const { data: template, error: templateError } = await supabase
+      .from('interview_templates')
+      .select('id, status, current_version')
+      .eq('id', templateId)
+      .eq('status', 'published')
+      .maybeSingle();
+
+    if (templateError) throw templateError;
+    if (!isRecord(template)) return null;
+    const currentVersion = template['current_version'];
+    const versionNumber =
+      typeof currentVersion === 'number'
+        ? currentVersion
+        : typeof currentVersion === 'string'
+          ? Number(currentVersion)
+          : NaN;
+    if (!Number.isInteger(versionNumber) || versionNumber <= 0) return null;
+
+    const { data: versionRow, error: versionError } = await supabase
+      .from('interview_template_versions')
+      .select('id, version')
+      .eq('template_id', templateId)
+      .eq('version', versionNumber)
+      .maybeSingle();
+
+    if (versionError) throw versionError;
+    if (!isRecord(versionRow) || typeof versionRow['id'] !== 'string') return null;
+    const storedVersion = versionRow['version'];
+    const parsedVersion =
+      typeof storedVersion === 'number'
+        ? storedVersion
+        : typeof storedVersion === 'string'
+          ? Number(storedVersion)
+          : NaN;
+    if (!Number.isInteger(parsedVersion) || parsedVersion <= 0) return null;
+    return { id: versionRow['id'], version: parsedVersion };
   }
 
   /**
@@ -253,7 +311,9 @@ export class InterviewCatalogService {
   async getOwnSession(sessionId: string): Promise<InterviewSessionSummary | null> {
     const { data, error } = await supabase
       .from('interview_sessions')
-      .select('id, status, template_id, prompt_version, started_at, ended_at, interview_templates(title, kind, duration_minutes)')
+      .select(
+        'id, status, template_id, prompt_version, template_version_id, started_at, ended_at, interview_templates(title, kind, duration_minutes), interview_template_versions(title, kind, duration_minutes)'
+      )
       .eq('id', sessionId)
       .maybeSingle();
 
@@ -261,7 +321,8 @@ export class InterviewCatalogService {
     if (!isRecord(data)) return null;
 
     const row = data as unknown as SessionRow;
-    const template = embeddedTemplate(row.interview_templates);
+    const snapshot = embeddedTemplate(row.interview_template_versions);
+    const template = snapshot ?? embeddedTemplate(row.interview_templates);
     if (
       typeof row.id !== 'string' ||
       typeof row.status !== 'string' ||

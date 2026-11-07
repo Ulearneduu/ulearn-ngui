@@ -54,6 +54,7 @@ export interface CrtAttemptSummary {
   id: string;
   path_id: string;
   module_id: string | null;
+  kind: 'practice' | 'mock';
   status: 'in_progress' | 'submitted';
   started_at: string;
   submitted_at: string | null;
@@ -61,7 +62,10 @@ export interface CrtAttemptSummary {
   score: number | null;
   max_score: number | null;
 }
-
+export interface CrtHistoryAttempt extends CrtAttemptSummary {
+  path_title: string | null;
+  module_title: string | null;
+}
 export interface CrtAttemptScore {
   attempt_score: number;
   attempt_max_score: number;
@@ -95,8 +99,7 @@ const ATTEMPT_COLUMNS =
   'id, user_id, path_id, module_id, kind, status, started_at, submitted_at, duration_seconds, score, max_score';
 
 const ATTEMPT_SUMMARY_COLUMNS =
-  'id, path_id, module_id, status, started_at, submitted_at, duration_seconds, score, max_score';
-
+  'id, path_id, module_id, kind, status, started_at, submitted_at, duration_seconds, score, max_score';
 @Injectable({ providedIn: 'root' })
 export class CrtPracticeService {
   async listPublishedPaths(): Promise<CrtPracticePath[]> {
@@ -288,7 +291,44 @@ export class CrtPracticeService {
     if (error) throw new Error(error.message);
     return (data ?? []).map((row) => this.toAttemptSummary(row));
   }
-
+  async listMyHistoryAttempts(): Promise<CrtHistoryAttempt[]> {
+    const attempts = await this.listMyAttempts();
+    if (attempts.length === 0) return [];
+    const pathIds = [...new Set(attempts.map((attempt) => attempt.path_id))];
+    const moduleIds = [
+      ...new Set(
+        attempts
+          .map((attempt) => attempt.module_id)
+          .filter((id): id is string => id !== null)
+      ),
+    ];
+    const { data: paths, error: pathError } = await supabase
+      .from('crt_paths')
+      .select('id, title')
+      .in('id', pathIds);
+    if (pathError) throw new Error(pathError.message);
+    const { data: modules, error: moduleError } =
+      moduleIds.length > 0
+        ? await supabase
+            .from('crt_modules')
+            .select('id, title')
+            .in('id', moduleIds)
+        : { data: [], error: null };
+    if (moduleError) throw new Error(moduleError.message);
+    const pathTitles = new Map(
+      (paths ?? []).map((path) => [path.id, path.title])
+    );
+    const moduleTitles = new Map(
+      (modules ?? []).map((module) => [module.id, module.title])
+    );
+    return attempts.map((attempt) => ({
+      ...attempt,
+      path_title: pathTitles.get(attempt.path_id) ?? null,
+      module_title: attempt.module_id
+        ? moduleTitles.get(attempt.module_id) ?? null
+        : null,
+    }));
+  }
   async getMySubmittedAttempt(attemptId: string): Promise<CrtAttemptSummary> {
     const userId = await this.requireUserId();
     const { data, error } = await supabase
@@ -309,19 +349,13 @@ export class CrtPracticeService {
   }
 
   async reviewAttempt(attemptId: string): Promise<CrtAttemptReview[]> {
-    const attempt = await this.requireOwnedAttempt(attemptId);
-    if (attempt.status !== 'submitted') {
-      throw new Error('Review is available only after the attempt is submitted.');
-    }
-
+    await this.getMySubmittedAttempt(attemptId);
     const { data, error } = await supabase.rpc('crt_attempt_review', {
       target_attempt: attemptId,
     });
-
     if (error) throw new Error(error.message);
     return (Array.isArray(data) ? data : []).map((row) => this.toReview(row));
   }
-
   private async requireUserId(): Promise<string> {
     const { data, error } = await supabase.auth.getUser();
     if (error) throw new Error(error.message);
@@ -383,7 +417,7 @@ export class CrtPracticeService {
       .maybeSingle();
 
     if (error) throw new Error(error.message);
-    if (!data) throw new Error('Practice attempt not found.');
+    if (!data) throw new Error('Attempt not found.');
     return this.toAttempt(data as AttemptRow);
   }
 
@@ -429,16 +463,20 @@ export class CrtPracticeService {
   private toAttemptSummary(row: unknown): CrtAttemptSummary {
     const record = this.record(row);
     const status = record['status'];
+    const kind = record['kind'];
+    if (kind !== 'practice' && kind !== 'mock') {
+      throw new Error('Attempt kind is not recognized.');
+    }
     if (status !== 'in_progress' && status !== 'submitted') {
       throw new Error('Attempt status is not recognized.');
     }
-
     const score = record['score'];
     const maxScore = record['max_score'];
     return {
       id: this.text(record['id'], 'attempt id'),
       path_id: this.text(record['path_id'], 'path id'),
       module_id: this.nullableText(record['module_id']),
+      kind,
       status,
       started_at: this.text(record['started_at'], 'started_at'),
       submitted_at: this.nullableText(record['submitted_at']),

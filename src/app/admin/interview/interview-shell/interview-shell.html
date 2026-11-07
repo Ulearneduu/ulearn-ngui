@@ -1,0 +1,18 @@
+<div class="crt-frame">
+  <aside class="crt-nav" aria-label="Interview Admin">
+    <p class="crt-nav-title">Interview Admin</p>
+    <a routerLink="/admin/interview" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">
+      Overview
+    </a>
+    <a routerLink="/admin/interview/templates" routerLinkActive="active">Templates</a>
+  </aside>
+
+  <div class="crt-body">
+    <p class="crumb">
+      <a routerLink="/admin/interview">Interview Admin</a>
+      <span aria-hidden="true">/</span>
+      <span>{{ crumb() }}</span>
+    </p>
+    <ng-content />
+  </div>
+</div>

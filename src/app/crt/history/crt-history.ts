@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, OnInit, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { CrtAttemptSummary, CrtPracticeService } from '../services/crt-practice.service';
+import { CrtHistoryAttempt, CrtAttemptSummary, CrtPracticeService } from '../services/crt-practice.service';
 
 @Component({
   selector: 'app-crt-history',
@@ -81,7 +81,7 @@ export class CrtHistory implements OnInit {
 
   readonly loading = signal(true);
   readonly loadError = signal<string | null>(null);
-  readonly attempts = signal<CrtAttemptSummary[]>([]);
+  readonly attempts = signal<CrtHistoryAttempt[]>([]);
 
   ngOnInit(): void {
     void this.load();
@@ -91,7 +91,7 @@ export class CrtHistory implements OnInit {
     this.loading.set(true);
     this.loadError.set(null);
     try {
-      this.attempts.set(await this.practice.listMyAttempts());
+      this.attempts.set(await this.practice.listMyHistoryAttempts());
     } catch (error: unknown) {
       this.attempts.set([]);
       this.loadError.set(error instanceof Error ? error.message : 'Could not load attempt history.');

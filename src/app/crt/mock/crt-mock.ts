@@ -7,7 +7,8 @@ import {
   computed,
   signal,
 } from '@angular/core';
-import { ActivatedRoute, Router } from '@angular/router';
+import { DecimalPipe } from '@angular/common';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
   import {
     CrtMockQuestion,
     CrtMockService,
