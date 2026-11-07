@@ -1,12 +1,25 @@
 import type {
+  InterviewCompetencyComparison,
   InterviewCompetencyScore,
+  InterviewCompetencyScoreView,
+  InterviewEvaluationComparison,
   InterviewEvaluationSnapshot,
   InterviewEvaluationStatus,
+  InterviewScoreDelta,
+  InterviewScoreTrend,
   InterviewSessionStatus,
   InterviewSessionSummary,
   InterviewTemplateKind,
   InterviewTurn,
 } from '../models';
+import {
+  effectiveCompetencyScore,
+  effectiveOverallScore,
+  hasMentorAdjustments,
+  overridesForEvalVersion,
+  parseOverrideRows,
+  type InterviewScoreOverrideRecord,
+} from './interview-score-overrides.ts';
 
 const SESSION_STATUSES: readonly InterviewSessionStatus[] = ['in_progress', 'completed', 'failed'];
 const EVAL_STATUSES: readonly InterviewEvaluationStatus[] = ['pending', 'processing', 'completed', 'failed'];
@@ -97,6 +110,87 @@ export function formatCompletedAt(value: string | null): string | null {
   return new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium', timeStyle: 'short' }).format(date);
 }
 
+/** True when a completed session may start a redo (not while evaluation is still running). */
+export function canStartInterviewRedo(
+  sessionStatus: string,
+  evaluationStatus: string | null
+): boolean {
+  if (sessionStatus !== 'completed') return false;
+  return evaluationStatus !== 'processing';
+}
+
+export function interviewRedoBlockedReason(
+  sessionStatus: string,
+  evaluationStatus: string | null
+): string | null {
+  if (sessionStatus !== 'completed') {
+    return 'Finish the interview before starting a redo.';
+  }
+  if (evaluationStatus === 'processing') {
+    return 'Wait until scoring finishes before starting a redo.';
+  }
+  return null;
+}
+
+export function scoreTrend(before: number | null, after: number | null): InterviewScoreTrend {
+  if (before === null || after === null) return 'unavailable';
+  const delta = Math.round((after - before) * 100) / 100;
+  if (delta > 0) return 'improved';
+  if (delta < 0) return 'regressed';
+  return 'unchanged';
+}
+
+export function scoreDelta(before: number | null, after: number | null): InterviewScoreDelta {
+  const trend = scoreTrend(before, after);
+  const delta =
+    before === null || after === null ? null : Math.round((after - before) * 100) / 100;
+  return { before, after, delta, trend };
+}
+
+/**
+ * Compare a parent evaluation (before) with the current redo attempt (after).
+ * Missing competencies on either side stay null — never invent a zero.
+ */
+export function compareInterviewEvaluations(
+  before: InterviewEvaluationSnapshot | null,
+  after: InterviewEvaluationSnapshot
+): InterviewEvaluationComparison {
+  const beforeByName = new Map<string, number>();
+  for (const row of before?.competencies ?? []) {
+    beforeByName.set(row.competency, row.score);
+  }
+  const afterByName = new Map<string, number>();
+  for (const row of after.competencies) {
+    afterByName.set(row.competency, row.score);
+  }
+
+  const names = new Set<string>([...beforeByName.keys(), ...afterByName.keys()]);
+  const competencies: InterviewCompetencyComparison[] = [...names]
+    .sort((left, right) => left.localeCompare(right))
+    .map((competency) => ({
+      competency,
+      ...scoreDelta(beforeByName.get(competency) ?? null, afterByName.get(competency) ?? null),
+    }));
+
+  return {
+    overall: scoreDelta(before?.overallScore ?? null, after.overallScore),
+    competencies,
+  };
+}
+
+export function formatScoreDelta(delta: number | null): string {
+  if (delta === null) return '—';
+  if (delta > 0) return `+${formatScore(delta)}`;
+  return formatScore(delta);
+}
+
+export function trendLabel(trend: InterviewScoreTrend): string {
+  if (trend === 'improved') return 'Improved';
+  if (trend === 'regressed') return 'Regressed';
+  if (trend === 'unchanged') return 'Unchanged';
+  return 'N/A';
+}
+
 export interface InterviewEvaluationResponse {
   status: 'completed';
   evalVersion: string;
@@ -136,7 +230,8 @@ export function parseInterviewEvaluationResponse(value: unknown): InterviewEvalu
 export function parseEvaluationSnapshot(
   sessionRow: unknown,
   scoreRows: unknown,
-  turnRows: readonly InterviewTurn[]
+  turnRows: readonly InterviewTurn[],
+  overrideRows: unknown = []
 ): InterviewEvaluationSnapshot | null {
   if (!isRecord(sessionRow)) return null;
   const id = sessionRow['id'];
@@ -164,6 +259,9 @@ export function parseEvaluationSnapshot(
   const evaluatedAt = sessionRow['evaluated_at'];
   const claimedAt = sessionRow['evaluation_claimed_at'];
   const summary = sessionRow['evaluation_summary'];
+  const mentorReviewPublished = sessionRow['mentor_review_published'] === true;
+  const templateVersionId = sessionRow['template_version_id'];
+  const redoOfSessionId = sessionRow['redo_of_session_id'];
   const session: InterviewSessionSummary = {
     id,
     status,
@@ -171,27 +269,70 @@ export function parseEvaluationSnapshot(
     templateTitle: template.title,
     templateKind: template.kind,
     promptVersion,
+    templateVersionId: typeof templateVersionId === 'string' ? templateVersionId : null,
+    redoOfSessionId: typeof redoOfSessionId === 'string' ? redoOfSessionId : null,
     startedAt,
     endedAt: typeof endedAt === 'string' ? endedAt : null,
     durationMinutes: template.durationMinutes,
   };
 
-  const competencies = parseScores(scoreRows).filter((score) => !version || score.evalVersion === version);
+  const aiCompetencies = parseScores(scoreRows).filter((score) => !version || score.evalVersion === version);
   const turns = [...turnRows].sort((left, right) => left.seq - right.seq);
+  const aiOverallScore = finiteScore(sessionRow['overall_score']);
+  const overrides = mentorReviewPublished
+    ? overridesForEvalVersion(parseOverrideRows(overrideRows), version)
+    : [];
 
   return {
     session,
     evaluationStatus: typeof evaluationStatus === 'string' && isEvalStatus(evaluationStatus) ? evaluationStatus : null,
     evalVersion: version,
-    overallScore: finiteScore(sessionRow['overall_score']),
+    aiOverallScore,
+    mentorReviewPublished,
+    ...buildDisplayedScores(aiCompetencies, aiOverallScore, mentorReviewPublished, overrides),
     summary: typeof summary === 'string' && summary.trim() ? summary.trim() : null,
     strengths: textList(sessionRow['evaluation_strengths']) ?? [],
     improvements: textList(sessionRow['evaluation_improvements']) ?? [],
     tips: practiceTips(sessionRow['evaluation_tips']),
     evaluatedAt: typeof evaluatedAt === 'string' ? evaluatedAt : null,
     claimedAt: typeof claimedAt === 'string' ? claimedAt : null,
-    competencies,
     turns,
+  };
+}
+
+function buildDisplayedScores(
+  aiCompetencies: readonly InterviewCompetencyScore[],
+  aiOverallScore: number | null,
+  mentorReviewPublished: boolean,
+  overrides: readonly InterviewScoreOverrideRecord[]
+): Pick<InterviewEvaluationSnapshot, 'overallScore' | 'competencies' | 'mentorAdjusted'> {
+  if (!mentorReviewPublished || overrides.length === 0) {
+    return {
+      overallScore: aiOverallScore,
+      mentorAdjusted: false,
+      competencies: aiCompetencies.map((row) => ({
+        ...row,
+        aiScore: row.score,
+        mentorAdjusted: false,
+      })),
+    };
+  }
+
+  const baselines = aiCompetencies.map((row) => ({ competency: row.competency, score: row.score }));
+  const competencies: InterviewCompetencyScoreView[] = aiCompetencies.map((row) => {
+    const effective = effectiveCompetencyScore(row.competency, row.score, overrides);
+    return {
+      ...row,
+      score: effective,
+      aiScore: row.score,
+      mentorAdjusted: effective !== row.score,
+    };
+  });
+  const overallScore = effectiveOverallScore(baselines, overrides, aiOverallScore);
+  return {
+    overallScore,
+    competencies,
+    mentorAdjusted: hasMentorAdjustments(baselines, overrides),
   };
 }
 

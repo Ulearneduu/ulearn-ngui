@@ -1,22 +1,27 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, computed, effect, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { map } from 'rxjs';
-import type { InterviewEvaluationSnapshot } from '../models';
+import type { InterviewEvaluationComparison, InterviewEvaluationSnapshot } from '../models';
 import { InterviewRequestError } from './interview-api';
-import { InterviewCatalogService } from './interview-catalog.service';
+import { InterviewCatalogService, interviewErrorMessage } from './interview-catalog.service';
 import {
   EVAL_POLL_MAX_MS,
   EVAL_POLL_MS,
   canReclaimEvaluation,
+  canStartInterviewRedo,
+  compareInterviewEvaluations,
   evaluationPhase,
   formatCompletedAt,
   formatScore,
+  formatScoreDelta,
   interviewKindLabel,
+  interviewRedoBlockedReason,
   isInterviewAccessError,
   scoreBarPercent,
   shouldPollEvaluation,
   shouldStartEvaluation,
+  trendLabel,
   type ResultPhase,
 } from './interview-evaluation';
 
@@ -66,9 +71,80 @@ import {
                 Interview completed
               }
               · {{ data.session.durationMinutes }} min allotted
+              @if (data.session.redoOfSessionId) {
+                · Redo attempt
+              }
             </p>
           </div>
+          @if (data.session.status === 'completed') {
+            <div class="redo-actions">
+              <button
+                type="button"
+                class="primary"
+                (click)="redo()"
+                [disabled]="!canRedo() || redoWorking()"
+              >
+                {{ redoWorking() ? 'Starting redo…' : 'Redo Interview' }}
+              </button>
+              @if (redoBlocked(); as reason) {
+                <p class="redo-hint" role="status">{{ reason }}</p>
+              }
+              @if (redoError(); as error) {
+                <p class="redo-error" role="alert">{{ error }}</p>
+              }
+            </div>
+          }
         </header>
+
+        @if (comparison(); as compare) {
+          <section class="block compare" aria-labelledby="compare-heading">
+            <h2 id="compare-heading">Progress vs previous attempt</h2>
+            <p class="compare-lead">
+              Before is your previous linked attempt.
+              After is this redo.
+            </p>
+            <div class="compare-overall" [attr.data-trend]="compare.overall.trend">
+              <div>
+                <p class="score-label">Before</p>
+                <p class="compare-value">{{ scoreOrDash(compare.overall.before) }}</p>
+              </div>
+              <div>
+                <p class="score-label">After</p>
+                <p class="compare-value">{{ scoreOrDash(compare.overall.after) }}</p>
+              </div>
+              <div>
+                <p class="score-label">Change</p>
+                <p class="compare-value">{{ deltaText(compare.overall.delta) }}</p>
+                <p class="trend">{{ trendText(compare.overall.trend) }}</p>
+              </div>
+            </div>
+            @if (compare.competencies.length > 0) {
+              <table class="compare-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Competency</th>
+                    <th scope="col">Before</th>
+                    <th scope="col">After</th>
+                    <th scope="col">Change</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (row of compare.competencies; track row.competency) {
+                    <tr [attr.data-trend]="row.trend">
+                      <th scope="row">{{ row.competency }}</th>
+                      <td>{{ scoreOrDash(row.before) }}</td>
+                      <td>{{ scoreOrDash(row.after) }}</td>
+                      <td>
+                        <span>{{ deltaText(row.delta) }}</span>
+                        <span class="trend">{{ trendText(row.trend) }}</span>
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            }
+          </section>
+        }
 
         @if (phase() === 'not_completed') {
           <section class="panel">
@@ -117,6 +193,12 @@ import {
               } @else {
                 <p class="score-value">—</p>
               }
+              @if (data.mentorAdjusted) {
+                <p class="mentor-adjusted" role="status">Mentor-adjusted score</p>
+                @if (data.aiOverallScore !== null && data.aiOverallScore !== data.overallScore) {
+                  <p class="ai-baseline">AI score {{ scoreText(data.aiOverallScore) }}/100</p>
+                }
+              }
             </div>
             <div>
               <h2>Overall performance</h2>
@@ -139,6 +221,11 @@ import {
                       <h3>{{ item.competency }}</h3>
                       <p>{{ scoreText(item.score) }}/100</p>
                     </div>
+                    @if (item.mentorAdjusted) {
+                      <p class="mentor-adjusted" role="status">
+                        Mentor-adjusted (AI {{ scoreText(item.aiScore) }})
+                      </p>
+                    }
                     @if (isCodingCompetency(item.competency)) {
                       <p class="coding-outcome" [class.ok]="item.score >= 100" role="status">
                         {{ codingOutcomeLabel(item.score) }}
@@ -252,6 +339,46 @@ import {
     }
     .panel p, .summary, .feedback { margin-top: 10px; line-height: 1.6; font-weight: 650; }
     .score-card { align-items: center; }
+    .redo-actions {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 8px;
+      min-width: 200px;
+    }
+    .redo-hint, .redo-error {
+      margin: 0;
+      max-width: 260px;
+      text-align: right;
+      font-size: 13px;
+      font-weight: 700;
+      line-height: 1.4;
+    }
+    .redo-hint { color: #626277; }
+    .redo-error { color: #991b1b; }
+    .compare-lead { margin-top: 8px; color: #626277; font-weight: 700; }
+    .compare-overall {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px;
+      margin-top: 18px;
+      padding: 16px;
+      border-radius: 14px;
+      background: #f7f8fc;
+    }
+    .compare-value { margin-top: 6px; color: var(--navy); font-family: 'Poppins', sans-serif; font-size: 28px; font-weight: 700; }
+    .compare-table { width: 100%; margin-top: 18px; border-collapse: collapse; }
+    .compare-table th, .compare-table td {
+      padding: 12px 10px;
+      border-top: 1px solid var(--border);
+      text-align: left;
+      vertical-align: top;
+      font-weight: 700;
+    }
+    .compare-table thead th { border-top: 0; color: #626277; font-size: 13px; text-transform: uppercase; letter-spacing: 0.03em; }
+    .compare-table [data-trend='improved'] .trend, .compare-overall[data-trend='improved'] .trend { color: #166534; }
+    .compare-table [data-trend='regressed'] .trend, .compare-overall[data-trend='regressed'] .trend { color: #991b1b; }
+    .trend { display: block; margin-top: 4px; font-size: 12px; font-weight: 800; letter-spacing: 0.02em; text-transform: uppercase; }
     .score-figure {
       min-width: 180px;
       padding: 8px 8px 8px 0;
@@ -274,6 +401,20 @@ import {
       text-transform: uppercase;
     }
     .coding-outcome.ok { color: #166534; }
+    .mentor-adjusted {
+      margin-top: 8px;
+      color: #65469b;
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+    }
+    .ai-baseline {
+      margin-top: 4px;
+      color: #626277;
+      font-size: 13px;
+      font-weight: 700;
+    }
     .feedback { color: var(--text); }
     .evidence { font-size: 14px; }
     .notes { list-style: disc; padding-left: 20px; }
@@ -338,7 +479,10 @@ import {
     }
     @media (max-width: 720px) {
       .result-page { padding: 20px 0 48px; }
-      .context, .title-row, .score-card { align-items: stretch; flex-direction: column; }
+      .context, .title-row, .score-card, .redo-actions, .compare-overall { align-items: stretch; flex-direction: column; }
+      .compare-overall { display: flex; }
+      .redo-actions { align-items: stretch; min-width: 0; }
+      .redo-hint, .redo-error { text-align: left; max-width: none; }
       h1 { font-size: 26px; }
       .score-figure { min-width: 0; }
       .primary, .secondary { width: 100%; margin-right: 0; }
@@ -348,6 +492,7 @@ import {
 })
 export class InterviewResult {
   private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
   private readonly catalog = inject(InterviewCatalogService);
   private readonly destroyRef = inject(DestroyRef);
 
@@ -358,13 +503,34 @@ export class InterviewResult {
 
   readonly phase = signal<ResultPhase | 'loading' | 'not_found' | 'unauthorized' | 'network'>('loading');
   readonly snapshot = signal<InterviewEvaluationSnapshot | null>(null);
+  readonly parentSnapshot = signal<InterviewEvaluationSnapshot | null>(null);
   readonly working = signal(false);
+  readonly redoWorking = signal(false);
+  readonly redoError = signal<string | null>(null);
   private readonly nowMs = signal(Date.now());
 
   readonly reclaim = computed(() => {
     const current = this.snapshot();
     if (!current) return false;
     return canReclaimEvaluation(current.evaluationStatus, current.claimedAt, this.nowMs());
+  });
+
+  readonly canRedo = computed(() => {
+    const current = this.snapshot();
+    if (!current) return false;
+    return canStartInterviewRedo(current.session.status, current.evaluationStatus);
+  });
+
+  readonly redoBlocked = computed(() => {
+    const current = this.snapshot();
+    if (!current || current.session.status !== 'completed') return null;
+    return interviewRedoBlockedReason(current.session.status, current.evaluationStatus);
+  });
+
+  readonly comparison = computed((): InterviewEvaluationComparison | null => {
+    const current = this.snapshot();
+    if (!current?.session.redoOfSessionId) return null;
+    return compareInterviewEvaluations(this.parentSnapshot(), current);
   });
 
   private generation = 0;
@@ -425,11 +591,43 @@ export class InterviewResult {
     await this.beginEvaluation(id, true);
   }
 
+  scoreOrDash(score: number | null): string {
+    return score === null ? '—' : this.scoreText(score);
+  }
+
+  deltaText(delta: number | null): string {
+    return formatScoreDelta(delta);
+  }
+
+  trendText(trend: InterviewEvaluationComparison['overall']['trend']): string {
+    return trendLabel(trend);
+  }
+
+  async redo(): Promise<void> {
+    const current = this.snapshot();
+    if (!current || !this.canRedo() || this.redoWorking()) return;
+    this.redoWorking.set(true);
+    this.redoError.set(null);
+    try {
+      const newSessionId = await this.catalog.startRedoSession(current.session.id);
+      const opened = await this.router.navigate(['/interview/session', newSessionId]);
+      if (!opened) {
+        this.redoError.set('The redo started, but the session page could not be opened.');
+      }
+    } catch (error: unknown) {
+      this.redoError.set(interviewErrorMessage(error, 'Could not start a redo of this interview.'));
+    } finally {
+      this.redoWorking.set(false);
+    }
+  }
+
   private async open(sessionId: string): Promise<void> {
     const generation = ++this.generation;
     this.clearPoll();
     this.startedFor = '';
     this.snapshot.set(null);
+    this.parentSnapshot.set(null);
+    this.redoError.set(null);
     this.phase.set('loading');
     if (!sessionId) {
       this.phase.set('not_found');
@@ -443,6 +641,7 @@ export class InterviewResult {
         return;
       }
       this.applySnapshot(snapshot, false);
+      await this.loadParentComparison(snapshot, generation);
       if (shouldStartEvaluation(this.viewPhase(snapshot, false), false)) {
         await this.beginEvaluation(sessionId, false);
       } else if (shouldPollEvaluation(this.viewPhase(snapshot, false))) {
@@ -451,6 +650,25 @@ export class InterviewResult {
     } catch (error: unknown) {
       if (generation !== this.generation) return;
       this.phase.set(isInterviewAccessError(error) ? 'unauthorized' : 'network');
+    }
+  }
+
+  private async loadParentComparison(
+    snapshot: InterviewEvaluationSnapshot,
+    generation: number
+  ): Promise<void> {
+    const parentId = snapshot.session.redoOfSessionId;
+    if (!parentId) {
+      this.parentSnapshot.set(null);
+      return;
+    }
+    try {
+      const parent = await this.catalog.getOwnEvaluation(parentId);
+      if (generation !== this.generation) return;
+      this.parentSnapshot.set(parent);
+    } catch {
+      if (generation !== this.generation) return;
+      this.parentSnapshot.set(null);
     }
   }
 

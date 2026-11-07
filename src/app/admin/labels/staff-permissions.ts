@@ -30,6 +30,11 @@ export const STAFF_PERMISSIONS: StaffPermission[] = [
     key: 'interview_quota.manage',
     group: 'Student features',
     label: 'Manage interview weekly quota'
+  },
+  {
+    key: 'interview.reviews',
+    group: 'Student features',
+    label: 'Review interview scores'
   }
 ];
 

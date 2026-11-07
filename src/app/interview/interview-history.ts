@@ -41,8 +41,14 @@ import { InterviewCatalogService, interviewErrorMessage } from './interview-cata
                 <p class="meta">{{ formatDate(session) }}</p>
                 <p class="meta">
                   <span class="badge" [attr.data-status]="session.status">{{ statusLabel(session.status) }}</span>
+                  @if (session.redoOfSessionId) {
+                    <span class="badge redo">Redo</span>
+                  }
                   @if (session.status === 'completed') {
                     <span class="score">Score: {{ scoreLabel(session) }}</span>
+                    @if (session.mentorAdjusted) {
+                      <span class="mentor-adjusted">Mentor-adjusted</span>
+                    }
                   }
                 </p>
               </div>
@@ -152,10 +158,23 @@ import { InterviewCatalogService, interviewErrorMessage } from './interview-cata
       background: #fdecec;
       color: #991b1b;
     }
+    .badge.redo {
+      margin-left: 8px;
+      background: #f3eff9;
+      color: var(--purple);
+    }
     .score {
       margin-left: 12px;
       font-size: 0.875rem;
       color: var(--navy);
+    }
+    .mentor-adjusted {
+      margin-left: 10px;
+      font-size: 0.75rem;
+      font-weight: 800;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      color: #65469b;
     }
     .history-actions {
       flex-shrink: 0;

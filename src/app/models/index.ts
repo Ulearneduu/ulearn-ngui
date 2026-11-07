@@ -774,9 +774,31 @@ export interface InterviewSessionSummary {
   templateKind: InterviewTemplateKind;
   promptVersion: string;
   templateVersionId?: string | null;
+  /** Parent attempt when this session is a redo (INT-011). */
+  redoOfSessionId?: string | null;
   startedAt: string;
   endedAt: string | null;
   durationMinutes: number;
+}
+
+/** Overall or competency trend between two linked attempts (INT-011). */
+export type InterviewScoreTrend = 'improved' | 'regressed' | 'unchanged' | 'unavailable';
+
+export interface InterviewScoreDelta {
+  before: number | null;
+  after: number | null;
+  delta: number | null;
+  trend: InterviewScoreTrend;
+}
+
+export interface InterviewCompetencyComparison extends InterviewScoreDelta {
+  competency: string;
+}
+
+/** Before/after scorecard derived from two INT-008 evaluation snapshots. */
+export interface InterviewEvaluationComparison {
+  overall: InterviewScoreDelta;
+  competencies: InterviewCompetencyComparison[];
 }
 
 /** One stored student or interviewer message. */
@@ -800,12 +822,26 @@ export interface InterviewCompetencyScore {
   evalVersion: string;
 }
 
+/** One competency score with optional mentor adjustment (INT-015). */
+export interface InterviewCompetencyScoreView extends InterviewCompetencyScore {
+  /** Immutable AI score for this competency. */
+  aiScore: number;
+  /** True when a published mentor override changed the displayed score. */
+  mentorAdjusted: boolean;
+}
+
 /** Saved evaluation and transcript for the signed-in student's session. */
 export interface InterviewEvaluationSnapshot {
   session: InterviewSessionSummary;
   evaluationStatus: InterviewEvaluationStatus | null;
   evalVersion: string | null;
+  /** Score shown to the student (AI, or mentor-effective when published). */
   overallScore: number | null;
+  /** Immutable AI overall mean from interview_sessions.overall_score. */
+  aiOverallScore: number | null;
+  mentorReviewPublished: boolean;
+  /** True when published review applies at least one override. */
+  mentorAdjusted: boolean;
   summary: string | null;
   strengths: string[];
   improvements: string[];
@@ -813,8 +849,80 @@ export interface InterviewEvaluationSnapshot {
   tips: string[];
   evaluatedAt: string | null;
   claimedAt: string | null;
-  competencies: InterviewCompetencyScore[];
+  competencies: InterviewCompetencyScoreView[];
   turns: InterviewTurn[];
+}
+
+export type InterviewOverrideTargetKind = 'overall' | 'competency';
+
+/** Append-only mentor override audit row (INT-015). */
+export interface InterviewScoreOverride {
+  id: string;
+  sessionId: string;
+  mentorId: string;
+  mentorName?: string | null;
+  targetKind: InterviewOverrideTargetKind;
+  competency: string | null;
+  evalVersion: string;
+  oldScore: number;
+  newScore: number;
+  reason: string;
+  createdAt: string;
+}
+
+/** Admin review queue row (INT-015). */
+export interface InterviewReviewQueueItem {
+  sessionId: string;
+  studentId: string;
+  studentName: string;
+  studentEmail: string | null;
+  templateId: string;
+  templateTitle: string;
+  templateKind: InterviewTemplateKind | string | null;
+  status: InterviewSessionStatus;
+  evaluationStatus: InterviewEvaluationStatus | null;
+  evalVersion: string | null;
+  aiOverallScore: number | null;
+  effectiveOverallScore: number | null;
+  mentorReviewPublished: boolean;
+  startedAt: string;
+  endedAt: string | null;
+  evaluatedAt: string | null;
+}
+
+/** Admin review detail payload (INT-015). */
+export interface InterviewReviewDetail {
+  sessionId: string;
+  student: { id: string; name: string; email: string | null };
+  template: {
+    id: string;
+    title: string;
+    kind: InterviewTemplateKind | string | null;
+    durationMinutes: number | null;
+  };
+  status: InterviewSessionStatus;
+  evaluationStatus: InterviewEvaluationStatus | null;
+  evalVersion: string | null;
+  promptVersion: string;
+  startedAt: string;
+  endedAt: string | null;
+  evaluatedAt: string | null;
+  summary: string | null;
+  strengths: string[];
+  improvements: string[];
+  aiOverallScore: number | null;
+  effectiveOverallScore: number | null;
+  mentorReviewPublished: boolean;
+  turns: InterviewTurn[];
+  aiCompetencies: InterviewCompetencyScore[];
+  effectiveCompetencies: {
+    competency: string;
+    aiScore: number;
+    effectiveScore: number;
+    feedback: string;
+    evidence: string;
+  }[];
+  overrides: InterviewScoreOverride[];
 }
 
 /** Student history list row (INT-002 session + template title). */
@@ -824,5 +932,12 @@ export interface InterviewHistoryItem {
   status: InterviewSessionStatus;
   startedAt: string;
   endedAt: string | null;
+  /**
+   * Display overall: AI baseline, or mentor-effective when mentorReviewPublished.
+   * Never mutates interview_sessions.overall_score.
+   */
   overallScore: number | null;
+  mentorReviewPublished: boolean;
+  mentorAdjusted: boolean;
+  redoOfSessionId: string | null;
 }

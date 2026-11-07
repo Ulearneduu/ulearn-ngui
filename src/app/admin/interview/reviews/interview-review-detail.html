@@ -1,0 +1,152 @@
+<app-interview-admin-shell crumb="Review detail">
+  <div class="detail-page">
+    <div class="context">
+      <a routerLink="/admin/interview/reviews">← Back to reviews</a>
+    </div>
+
+    @if (loading()) {
+      <p class="status" role="status">Loading review…</p>
+    } @else if (error() && !detail()) {
+      <p class="error" role="alert">{{ error() }}</p>
+    } @else if (detail(); as data) {
+      @if (error(); as message) {
+        <p class="error" role="alert">{{ message }}</p>
+      }
+      @if (notice(); as message) {
+        <p class="notice" role="status">{{ message }}</p>
+      }
+
+      <header class="page-header">
+        <div>
+          <p class="eyebrow">{{ kindLabel(data.template.kind) }} interview</p>
+          <h1>{{ data.template.title }}</h1>
+          <p class="meta">
+            {{ data.student.name }}
+            @if (data.student.email) {
+              · {{ data.student.email }}
+            }
+            · Completed {{ when(data.endedAt) }}
+          </p>
+        </div>
+        <button
+          type="button"
+          class="btn-primary"
+          (click)="togglePublish()"
+          [disabled]="working()"
+        >
+          {{ data.mentorReviewPublished ? 'Unpublish from student' : 'Publish to student' }}
+        </button>
+      </header>
+
+      <section class="panel">
+        <h2>Session</h2>
+        <dl class="facts">
+          <div><dt>Status</dt><dd>{{ data.status }}</dd></div>
+          <div><dt>Evaluation</dt><dd>{{ data.evaluationStatus ?? '—' }}</dd></div>
+          <div><dt>Eval version</dt><dd>{{ data.evalVersion ?? '—' }}</dd></div>
+          <div><dt>AI overall</dt><dd>{{ scoreText(data.aiOverallScore) }}</dd></div>
+          <div><dt>Effective overall</dt><dd>{{ scoreText(data.effectiveOverallScore) }}</dd></div>
+          <div>
+            <dt>Student visibility</dt>
+            <dd>{{ data.mentorReviewPublished ? 'Published' : 'Unpublished' }}</dd>
+          </div>
+        </dl>
+        @if (data.summary) {
+          <p class="summary">{{ data.summary }}</p>
+        }
+      </section>
+
+      <section class="panel">
+        <h2>AI competency scores</h2>
+        <ul class="scores">
+          @for (row of data.effectiveCompetencies; track row.competency) {
+            <li>
+              <div class="score-head">
+                <strong>{{ row.competency }}</strong>
+                <span>AI {{ scoreText(row.aiScore) }} · Effective {{ scoreText(row.effectiveScore) }}</span>
+              </div>
+              @if (row.feedback) {
+                <p>{{ row.feedback }}</p>
+              }
+            </li>
+          }
+        </ul>
+      </section>
+
+      <section class="panel grid-2">
+        <div>
+          <h2>Override overall</h2>
+          <p class="hint">AI overall stays {{ scoreText(data.aiOverallScore) }}. Current effective is {{ scoreText(data.effectiveOverallScore) }}.</p>
+          <label>
+            New score (0–100)
+            <input type="number" min="0" max="100" step="0.01" [ngModel]="overallScore()" (ngModelChange)="overallScore.set($event)" />
+          </label>
+          <label>
+            Reason (required, 10+ characters)
+            <textarea rows="3" [ngModel]="overallReason()" (ngModelChange)="overallReason.set($event)"></textarea>
+          </label>
+          <button type="button" class="btn-primary" (click)="submitOverall()" [disabled]="working()">
+            Save overall override
+          </button>
+        </div>
+        <div>
+          <h2>Override competency</h2>
+          <p class="hint">Coding and all other competencies use the same override path.</p>
+          <label>
+            Competency
+            <select [ngModel]="competencyName()" (ngModelChange)="competencyName.set($event)">
+              @for (name of competencyOptions(); track name) {
+                <option [value]="name">{{ name }}</option>
+              }
+            </select>
+          </label>
+          <label>
+            New score (0–100)
+            <input type="number" min="0" max="100" step="0.01" [ngModel]="competencyScore()" (ngModelChange)="competencyScore.set($event)" />
+          </label>
+          <label>
+            Reason (required, 10+ characters)
+            <textarea rows="3" [ngModel]="competencyReason()" (ngModelChange)="competencyReason.set($event)"></textarea>
+          </label>
+          <button type="button" class="btn-primary" (click)="submitCompetency()" [disabled]="working()">
+            Save competency override
+          </button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Override history</h2>
+        @if (data.overrides.length === 0) {
+          <p class="hint">No mentor overrides yet.</p>
+        } @else {
+          <ol class="history">
+            @for (row of data.overrides; track row.id) {
+              <li>
+                <p class="history-title">{{ targetLabel(row.targetKind, row.competency) }}</p>
+                <p>Old {{ scoreText(row.oldScore) }} → New {{ scoreText(row.newScore) }}</p>
+                <p>{{ row.reason }}</p>
+                <p class="muted">Changed by {{ row.mentorName || 'Reviewer' }} · {{ when(row.createdAt) }}</p>
+              </li>
+            }
+          </ol>
+        }
+      </section>
+
+      <section class="panel">
+        <h2>Full transcript</h2>
+        @if (data.turns.length === 0) {
+          <p class="hint">No saved turns.</p>
+        } @else {
+          <ol class="transcript">
+            @for (turn of data.turns; track turn.id) {
+              <li [class.student]="turn.role === 'user'">
+                <p class="who">{{ turn.role === 'assistant' ? 'Interviewer' : 'Student' }}</p>
+                <p class="content">{{ turn.content }}</p>
+              </li>
+            }
+          </ol>
+        }
+      </section>
+    }
+  </div>
+</app-interview-admin-shell>

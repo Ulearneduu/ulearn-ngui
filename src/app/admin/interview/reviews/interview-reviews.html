@@ -1,0 +1,68 @@
+<app-interview-admin-shell crumb="Reviews">
+  <div class="reviews-page">
+    <header class="page-header">
+      <div>
+        <h1>Mentor interview reviews</h1>
+        <p>Completed evaluations ready for mentor score review and publish.</p>
+      </div>
+      <button type="button" class="btn-secondary" (click)="reload()" [disabled]="loading()">
+        Refresh
+      </button>
+    </header>
+
+    @if (loading()) {
+      <p class="status" role="status">Loading review queue…</p>
+    } @else if (error(); as message) {
+      <p class="error" role="alert">{{ message }}</p>
+    } @else if (rows().length === 0) {
+      <p class="status">No completed evaluations are waiting for review.</p>
+    } @else {
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">Student</th>
+              <th scope="col">Template</th>
+              <th scope="col">Completed</th>
+              <th scope="col">Evaluation</th>
+              <th scope="col">AI overall</th>
+              <th scope="col">Effective</th>
+              <th scope="col">Review status</th>
+              <th scope="col"><span class="sr-only">Open</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of rows(); track row.sessionId) {
+              <tr>
+                <td>
+                  <div class="primary">{{ row.studentName }}</div>
+                  @if (row.studentEmail) {
+                    <div class="muted">{{ row.studentEmail }}</div>
+                  }
+                </td>
+                <td>
+                  <div class="primary">{{ row.templateTitle }}</div>
+                  <div class="muted">{{ kindLabel(row.templateKind) }}</div>
+                </td>
+                <td>{{ endedLabel(row.endedAt) }}</td>
+                <td>{{ row.evaluationStatus ?? '—' }}</td>
+                <td>{{ scoreText(row.aiOverallScore) }}</td>
+                <td>{{ scoreText(row.effectiveOverallScore) }}</td>
+                <td>
+                  <span class="badge" [class.published]="row.mentorReviewPublished">
+                    {{ reviewStatus(row) }}
+                  </span>
+                </td>
+                <td>
+                  <a class="link" [routerLink]="['/admin/interview/reviews', row.sessionId]">
+                    Open review
+                  </a>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </div>
+</app-interview-admin-shell>
