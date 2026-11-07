@@ -5,6 +5,7 @@
  * A competency with applicable:false is omitted and is not given a score.
  */
 
+import { readOpenAiUsage, type ProviderUsage } from './interview-usage.ts';
 import {
   providerFailure,
   providerUrl,
@@ -507,7 +508,7 @@ export interface EvaluationRequest {
 }
 
 export type EvaluationReply =
-  | { ok: true; text: string }
+  | { ok: true; text: string; usage: ProviderUsage }
   | { ok: false; code: string; httpStatus: number };
 
 export async function requestEvaluationReply(options: EvaluationRequest): Promise<EvaluationReply> {
@@ -551,7 +552,8 @@ export async function requestEvaluationReply(options: EvaluationRequest): Promis
       }
       const payload = await response.json().catch(() => null);
       const text = readOpenAiAnswer(payload);
-      if (typeof text === 'string' && text !== 'blocked') return { ok: true, text };
+      const usage = readOpenAiUsage(payload);
+      if (typeof text === 'string' && text !== 'blocked') return { ok: true, text, usage };
       last = { ok: false, code: 'INTERVIEW_AI_UNAVAILABLE', httpStatus: 503 };
       if (attempt === attempts - 1) return last;
       await wait(retryDelayMs(attempt, options.retryBaseMs, null, random));

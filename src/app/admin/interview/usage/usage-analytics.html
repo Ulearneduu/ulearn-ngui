@@ -1,0 +1,186 @@
+<app-interview-admin-shell crumb="Usage">
+  <div class="usage-page">
+    <header class="page-header">
+      <div>
+        <h1>Interview usage</h1>
+        <p>Sessions, completion, scores, token usage, and estimated AI cost for the selected period.</p>
+      </div>
+      <button type="button" class="btn-secondary" (click)="exportCsv()" [disabled]="loading() || exporting()">
+        {{ exporting() ? 'Exporting…' : 'Export CSV' }}
+      </button>
+    </header>
+
+    <form class="filters" (ngSubmit)="apply()">
+      <label>
+        From
+        <input type="date" name="from" [(ngModel)]="fromDate" required />
+      </label>
+      <label>
+        To
+        <input type="date" name="to" [(ngModel)]="toDate" required />
+      </label>
+      <label>
+        College
+        <select name="college" [(ngModel)]="college">
+          <option value="">All colleges</option>
+          @if (filters()?.unassignedCollege) {
+            <option value="__unassigned__">Unassigned</option>
+          }
+          @for (college of filters()?.colleges ?? []; track college) {
+            <option [value]="college">{{ college }}</option>
+          }
+        </select>
+      </label>
+      <label>
+        Batch
+        <select name="batch" [(ngModel)]="batchId">
+          <option value="">All batches</option>
+          @if (filters()?.unassignedBatch) {
+            <option value="__unassigned__">Unassigned</option>
+          }
+          @for (batch of filters()?.batches ?? []; track batch.id) {
+            <option [value]="batch.id">{{ batch.name }}</option>
+          }
+        </select>
+      </label>
+      <label>
+        Status
+        <select name="status" [(ngModel)]="status">
+          <option value="">All statuses</option>
+          <option value="in_progress">In progress</option>
+          <option value="completed">Completed</option>
+          <option value="failed">Failed</option>
+        </select>
+      </label>
+      <label>
+        Template
+        <select name="template" [(ngModel)]="templateId">
+          <option value="">All templates</option>
+          @for (template of filters()?.templates ?? []; track template.id) {
+            <option [value]="template.id">{{ template.title }}</option>
+          }
+        </select>
+      </label>
+      <button type="submit" class="btn-secondary" [disabled]="loading()">Apply</button>
+    </form>
+    <p class="hint">Dates use your local timezone. Duration is elapsed time from start to end, not active speaking time.</p>
+
+    @if (exportError(); as exportMessage) {
+      <p class="error" role="alert">{{ exportMessage }}</p>
+    }
+
+    @if (loading()) {
+      <p class="status" role="status">Loading interview usage…</p>
+    } @else if (error(); as message) {
+      <p class="error" role="alert">{{ message }}</p>
+    } @else if (report(); as report) {
+      @if (report.summary.sessionsStarted === 0) {
+        <p class="status">No interview sessions match these filters.</p>
+      }
+
+      <div class="stats-grid">
+        <article class="stat-card">
+          <p class="stat-label">Sessions started</p>
+          <p class="stat-value">{{ report.summary.sessionsStarted }}</p>
+        </article>
+        <article class="stat-card">
+          <p class="stat-label">Sessions completed</p>
+          <p class="stat-value">{{ report.summary.sessionsCompleted }}</p>
+        </article>
+        <article class="stat-card">
+          <p class="stat-label">Completion rate</p>
+          <p class="stat-value">{{ rateLabel(report.summary.completionRate) }}</p>
+        </article>
+        <article class="stat-card">
+          <p class="stat-label">Average AI score ({{ report.summary.scoreScale }})</p>
+          <p class="stat-value">{{ scoreLabel(report.summary.averageScore) }}</p>
+          <p class="stat-note">{{ report.summary.scoredSessions }} scored sessions</p>
+        </article>
+        <article class="stat-card">
+          <p class="stat-label">Students</p>
+          <p class="stat-value">{{ report.summary.uniqueStudents }}</p>
+        </article>
+        <article class="stat-card">
+          <p class="stat-label">Known input tokens</p>
+          <p class="stat-value">{{ tokenLabel(report.summary.inputTokens) }}</p>
+        </article>
+        <article class="stat-card">
+          <p class="stat-label">Known output tokens</p>
+          <p class="stat-value">{{ tokenLabel(report.summary.outputTokens) }}</p>
+        </article>
+        <article class="stat-card">
+          <p class="stat-label">Total tokens</p>
+          <p class="stat-value">{{ tokenLabel(report.summary.totalTokens) }}</p>
+          @if (report.summary.usageIncomplete) {
+            <p class="stat-note">Some AI calls did not return usage.</p>
+          }
+        </article>
+        <article class="stat-card">
+          <p class="stat-label">Estimated AI cost</p>
+          <p class="stat-value cost">{{ costLabel() }}</p>
+          @if (!filters()?.pricingConfigured) {
+            <p class="stat-note">No approved model rate is configured.</p>
+          }
+        </article>
+        <article class="stat-card">
+          <p class="stat-label">Average elapsed time</p>
+          <p class="stat-value">{{ elapsedLabel(report.summary.averageElapsedSeconds) }}</p>
+          <p class="stat-note">Total {{ elapsedLabel(report.summary.totalElapsedSeconds) }} across {{ report.summary.sessionsWithEnd }} ended sessions</p>
+        </article>
+      </div>
+
+      @if (report.rows.length === 0) {
+        <p class="status">No sessions on this page.</p>
+      } @else {
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Student</th>
+                <th scope="col">College</th>
+                <th scope="col">Batch</th>
+                <th scope="col">Template</th>
+                <th scope="col">Status</th>
+                <th scope="col">Elapsed</th>
+                <th scope="col">Tokens</th>
+                <th scope="col">Estimated cost</th>
+                <th scope="col">AI score</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of report.rows; track row.sessionId) {
+                <tr>
+                  <td>
+                    <div class="primary">{{ studentLabel(row.studentId) }}</div>
+                    <div class="muted">{{ row.startedAt }}</div>
+                  </td>
+                  <td>{{ row.collegeName || 'Unassigned' }}</td>
+                  <td>{{ row.batchNames || 'Unassigned' }}</td>
+                  <td>
+                    <div class="primary">{{ row.templateTitle }}</div>
+                    <div class="muted">{{ row.templateKind || 'Interview' }}</div>
+                  </td>
+                  <td>{{ row.status }}</td>
+                  <td>{{ elapsedLabel(row.elapsedSeconds) }}</td>
+                  <td>
+                    {{ tokenLabel(row.totalTokens) }}
+                    @if (row.usageState === 'partial' || row.usageState === 'unknown') {
+                      <div class="muted">Usage incomplete</div>
+                    }
+                  </td>
+                  <td>{{ costLabelFor(row) }}</td>
+                  <td>{{ scoreLabel(row.score) }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+        <div class="pager">
+          <button type="button" class="btn-secondary" (click)="previousPage()" [disabled]="!canGoBack()">Previous</button>
+          <span>{{ pageStart() }}–{{ pageEnd() }} of {{ report.page.total }}</span>
+          <button type="button" class="btn-secondary" (click)="nextPage()" [disabled]="!canGoForward()">Next</button>
+        </div>
+      }
+    }
+  </div>
+</app-interview-admin-shell>

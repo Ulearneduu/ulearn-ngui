@@ -3,6 +3,8 @@
  * Keep the timer math in sync with src/app/interview/interview-timer.ts.
  */
 
+import { readOpenAiUsage, type ProviderUsage } from './interview-usage.ts';
+
 export const MAX_ANSWER_CHARS = 8000;
 export const MAX_HISTORY_TURNS = 40;
 export const CLIENT_TURN_INDEX = 'interview_turns_session_client_turn';
@@ -379,7 +381,7 @@ export interface ReplyRequest {
 }
 
 export type ReplyResult =
-  | { ok: true; text: string }
+  | { ok: true; text: string; usage: ProviderUsage }
   | { ok: false; code: string; httpStatus: number };
 
 export async function requestInterviewReply(options: ReplyRequest): Promise<ReplyResult> {
@@ -412,8 +414,9 @@ export async function requestInterviewReply(options: ReplyRequest): Promise<Repl
       }
       const payload = await response.json().catch(() => null);
       const text = readOpenAiAnswer(payload);
-      if (text === 'blocked') return { ok: true, text: SAFE_REDIRECT };
-      if (typeof text === 'string') return { ok: true, text: limitAssistantText(text) };
+      const usage = readOpenAiUsage(payload);
+      if (text === 'blocked') return { ok: true, text: SAFE_REDIRECT, usage };
+      if (typeof text === 'string') return { ok: true, text: limitAssistantText(text), usage };
       last = { ok: false, code: 'INTERVIEW_AI_UNAVAILABLE', httpStatus: 503 };
       if (attempt === attempts - 1) return last;
       await wait(retryDelayMs(attempt, options.retryBaseMs, null, random));

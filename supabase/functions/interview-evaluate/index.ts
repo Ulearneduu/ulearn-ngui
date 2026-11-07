@@ -16,6 +16,7 @@ import {
   type TranscriptTurn,
 } from '../_shared/interview-evaluate-policy.ts';
 import { normalizeSessionId } from '../_shared/interview-turn-policy.ts';
+import { recordInterviewAiUsage, usageEventKey } from '../_shared/interview-usage.ts';
 
 /**
  * interview-evaluate
@@ -180,6 +181,15 @@ Deno.serve(async (req) => {
       await markFailed(writer, session.id, claim.claimedAt);
       return fail(reply.httpStatus, reply.code, CLIENT_MESSAGE[reply.code] ?? CLIENT_MESSAGE['INTERVIEW_AI_UNAVAILABLE'], sessionId);
     }
+    await recordInterviewAiUsage(writer, {
+      sessionId: session.id,
+      userId,
+      callKind: 'evaluation',
+      idempotencyKey: usageEventKey('evaluation', session.id, claim.claimedAt, 0),
+      provider: 'openai',
+      model: aiConfig.model,
+      usage: reply.usage,
+    });
 
     const parsed = parseEvaluationPayload(reply.text, competencies);
     if (!parsed.ok) {

@@ -304,7 +304,11 @@ test('provider calls keep the API key out of the URL and retry only transient fa
     random: () => 0,
   });
 
-  assert.deepEqual(result, { ok: true, text: 'What was your role?' });
+  assert.deepEqual(result, {
+    ok: true,
+    text: 'What was your role?',
+    usage: { inputTokens: null, outputTokens: null, known: false },
+  });
   assert.equal(calls.length, 2);
   assert.equal(calls[0]?.url, providerUrl());
   assert.equal(calls[0]?.url, 'https://api.openai.com/v1/chat/completions');
@@ -354,7 +358,11 @@ test('a safety block becomes the fixed professional redirect', async () => {
     retryBaseMs: 1,
     fetchImpl,
   });
-  assert.deepEqual(result, { ok: true, text: SAFE_REDIRECT });
+  assert.deepEqual(result, {
+    ok: true,
+    text: SAFE_REDIRECT,
+    usage: { inputTokens: null, outputTokens: null, known: false },
+  });
 });
 
 test('expiry completion uses the allotted end time and does not reopen a finished session', () => {

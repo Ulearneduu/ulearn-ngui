@@ -925,6 +925,81 @@ export interface InterviewReviewDetail {
   overrides: InterviewScoreOverride[];
 }
 
+/** Interview usage analytics (INT-016). Cost is null until a rate is configured. */
+export type InterviewUsageCostStatus =
+  | 'estimated'
+  | 'unavailable'
+  | 'unconfigured'
+  | 'mixed'
+  | 'none'
+  | 'no_usage';
+
+export interface InterviewUsageSummary {
+  sessionsStarted: number;
+  sessionsCompleted: number;
+  completionRate: number | null;
+  averageScore: number | null;
+  scoredSessions: number;
+  scoreScale: string;
+  uniqueStudents: number;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  totalTokens: number | null;
+  knownCalls: number;
+  unknownCalls: number;
+  sessionsMissingUsage: number;
+  estimatedCost: string | null;
+  currency: string | null;
+  costStatus: InterviewUsageCostStatus;
+  usageIncomplete: boolean;
+  durationBasis: 'elapsed_start_to_end';
+  averageElapsedSeconds: number | null;
+  totalElapsedSeconds: number | null;
+  sessionsWithEnd: number;
+  sessionsWithoutEnd: number;
+  periodFrom: string;
+  periodTo: string;
+}
+
+export interface InterviewUsageRow {
+  sessionId: string;
+  studentId: string;
+  collegeName: string | null;
+  batchNames: string | null;
+  templateTitle: string;
+  templateKind: string | null;
+  startedAt: string;
+  endedAt: string | null;
+  status: string;
+  elapsedSeconds: number | null;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  totalTokens: number | null;
+  usageState: 'none' | 'known' | 'unknown' | 'partial';
+  provider: string | null;
+  model: string | null;
+  estimatedCost: string | null;
+  currency: string | null;
+  costStatus: InterviewUsageCostStatus;
+  score: number | null;
+  lastUsageAt: string | null;
+}
+
+export interface InterviewUsageReport {
+  summary: InterviewUsageSummary;
+  page: { offset: number; limit: number; total: number };
+  rows: InterviewUsageRow[];
+}
+
+export interface InterviewUsageFilters {
+  colleges: string[];
+  unassignedCollege: boolean;
+  batches: { id: string; name: string }[];
+  unassignedBatch: boolean;
+  templates: { id: string; title: string; kind: string | null }[];
+  pricingConfigured: boolean;
+}
+
 /** Student history list row (INT-002 session + template title). */
 export interface InterviewHistoryItem {
   id: string;
