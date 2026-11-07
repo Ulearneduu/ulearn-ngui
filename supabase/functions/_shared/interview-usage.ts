@@ -86,6 +86,41 @@ export interface UsageSummary {
   sessionsWithoutEnd: number;
 }
 
+export interface ProviderCall {
+  responseId: string | null;
+  usage: ProviderUsage;
+}
+
+const PROVIDER_RESPONSE_ID = /^[A-Za-z0-9._:-]{6,200}$/;
+
+/** One provider HTTP response. A stable provider id dedupes a replay of that response. */
+export function readProviderCall(body: unknown): ProviderCall {
+  const responseId = isRecord(body) && typeof body['id'] === 'string' ? body['id'].trim() : '';
+  return {
+    responseId: PROVIDER_RESPONSE_ID.test(responseId) ? responseId : null,
+    usage: readOpenAiUsage(body),
+  };
+}
+
+/**
+ * Prefer the provider response id so a later call for the same turn is a new row,
+ * while storing the same response twice is ignored.
+ * Responses without an id use a per-response fallback so they are not collapsed together.
+ */
+export function usageRecordKey(input: {
+  kind: 'turn' | 'evaluation';
+  sessionId: string;
+  claimId: string;
+  index: number;
+  responseId: string | null;
+  uniqueFallback: string;
+}): string {
+  if (input.responseId && PROVIDER_RESPONSE_ID.test(input.responseId)) {
+    return `provider:${input.responseId}`;
+  }
+  return `${input.kind}:${input.sessionId}:${input.claimId}:${input.index}:${input.uniqueFallback}`;
+}
+
 export function readOpenAiUsage(body: unknown): ProviderUsage {
   if (!isRecord(body) || !isRecord(body['usage'])) return UNKNOWN_USAGE;
   const usage = body['usage'];

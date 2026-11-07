@@ -14,14 +14,11 @@ Interview sessions, turns, and evaluations stay on the INT-005 / INT-008 tables.
 
 `interview-turn` records each accepted reply, including a resume steering retry that produced a new model response. `interview-evaluate` records the accepted evaluation response, including a response that is later rejected as invalid JSON, because those tokens were consumed. A provider failure is not recorded.
 
-The same logical call uses a stable idempotency key:
+Each provider HTTP 200 is a usage row. The idempotency key is the provider response id (`provider:{id}` from the JSON `id` field, such as `chatcmpl-...`) when that id is present. Storing the same response again is ignored. A later provider call has a new id and is counted. A 429 or 5xx response is not stored.
 
-- Turn: `turn:{sessionId}:{clientTurnId}:{index}`
-- Evaluation: `evaluation:{sessionId}:{claimedAt}:0`
+A 200 body that parses but does not contain a usable answer is still stored. If it includes usage metadata, those tokens are kept. If it does not, the row is unknown usage rather than zero. A body that is not JSON has no metadata and is not given invented token counts.
 
-A retried request with the same key does not insert a second row. The internal provider retry loop returns only the accepted response, so a 429 or 5xx attempt is not added to the accepted call. A 200 response that cannot be parsed is discarded and only the later accepted response is stored. That can under-count tokens from the discarded response. It does not double-count.
-
-If the edge function calls the provider again after the first response was already stored under the same key, the second bill is not added. That is intentional.
+When the provider omits a response id, the key is `turn` or `evaluation`, the session, the client turn or evaluation claim, the call index, and a unique id for that response. Those rows are not collapsed into an earlier call for the same turn. A replay that does not call the provider does not insert a row.
 
 Recording is best-effort. A usage insert failure is logged and does not fail the interview.
 
@@ -101,12 +98,18 @@ Export uses the same report function and the same filters, paging 200 rows at a 
 
 Columns are session id, student id, college, batch, template, interview type, start, completion, status, elapsed seconds, input tokens, output tokens, total tokens, provider, model, estimated cost, currency, and AI score. The export does not include names, email, resume text, transcripts, passwords, or secrets. Student id is the profile UUID already used in administration.
 
+## Local validation
+
+The committed migrations start after an older baseline that is not in this repository, so `supabase start` in a brand-new database fails on the first course migration. An isolated stack for INT-016 was started with a separate project id and ports `54421` (API) and `54422` (database), leaving the INT-012 stack on `54321`/`54322` untouched. The INT-016 migration was applied there after the tables it reads (`profiles`, `batches`, `interview_sessions`, and staff permissions) existed. `profiles.college_name` is added by this migration when it is missing.
+
+Do not point this feature at production project `yllfccuxohnipleyseup`.
+
 ## Limitations
 
 - Pricing is not configured. Cost stays unavailable until approved rates are inserted.
 - Campus analytics are not college-scoped, because that authorization does not exist yet.
 - Elapsed duration is not active interview time.
 - Average score is the AI `overall_score`, not a published mentor override.
-- Discarded unparseable provider responses, and a second provider call that reuses an already stored idempotency key, are omitted.
+- A provider body that is not JSON has no usage metadata, so no token counts are stored for it. A parsed 200 that cannot be used as an answer is stored, with unknown usage when the body has no usage object.
 - Opening a session does not call the model. The first usage row appears on the first accepted turn or evaluation.
 - The voice interview uses the same `interview-turn` function, so its accepted replies are included. No separate voice meter is stored.

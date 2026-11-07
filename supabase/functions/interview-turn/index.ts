@@ -30,8 +30,8 @@ import {
 } from '../_shared/interview-resume.ts';
 import {
   recordInterviewAiUsage,
-  usageEventKey,
-  type ProviderUsage,
+  usageRecordKey,
+  type ProviderCall,
 } from '../_shared/interview-usage.ts';
 
 /**
@@ -173,7 +173,7 @@ Deno.serve(async (req) => {
       const basePrompt = resumeSummary
         ? `${template.systemPrompt}\n\n${resumeSystemAddendum(resumeSummary, askedResumeQuestions)}`
         : template.systemPrompt;
-      const capturedUsage: ProviderUsage[] = [];
+      const capturedUsage: ProviderCall[] = [];
       const resolved = await resolveResumeAwareReply({
         summary: resumeSummary,
         asked: askedResumeQuestions,
@@ -187,11 +187,31 @@ Deno.serve(async (req) => {
             maxRetries: aiConfig.maxRetries,
             retryBaseMs: aiConfig.retryBaseMs,
           });
+          capturedUsage.push(...reply.calls);
           if (!reply.ok) return { ok: false, code: reply.code, httpStatus: reply.httpStatus };
-          capturedUsage.push(reply.usage);
           return { ok: true, text: reply.text };
         },
       });
+      for (let index = 0; index < capturedUsage.length; index += 1) {
+        const call = capturedUsage[index];
+        if (!call) continue;
+        await recordInterviewAiUsage(writer, {
+          sessionId: session.id,
+          userId,
+          callKind: 'turn',
+          idempotencyKey: usageRecordKey({
+            kind: 'turn',
+            sessionId: session.id,
+            claimId: clientTurnId,
+            index,
+            responseId: call.responseId,
+            uniqueFallback: crypto.randomUUID(),
+          }),
+          provider: 'openai',
+          model: aiConfig.model,
+          usage: call.usage,
+        });
+      }
       if (!resolved.ok) {
         await markClaimFailed(writer, session.id, clientTurnId, reserved.claimedAt);
         await markSessionFailed(writer, session.id);
@@ -201,19 +221,6 @@ Deno.serve(async (req) => {
           CLIENT_MESSAGE[resolved.code] ?? CLIENT_MESSAGE['INTERVIEW_AI_UNAVAILABLE'],
           sessionId
         );
-      }
-      for (let index = 0; index < capturedUsage.length; index += 1) {
-        const usage = capturedUsage[index];
-        if (!usage) continue;
-        await recordInterviewAiUsage(writer, {
-          sessionId: session.id,
-          userId,
-          callKind: 'turn',
-          idempotencyKey: usageEventKey('turn', session.id, clientTurnId, index),
-          provider: 'openai',
-          model: aiConfig.model,
-          usage,
-        });
       }
       const noted = await noteAssistantText(writer, session.id, clientTurnId, reserved.claimedAt, resolved.text);
       if (!noted) return fail(409, 'TURN_IN_PROGRESS', CLIENT_MESSAGE['TURN_IN_PROGRESS'], sessionId);

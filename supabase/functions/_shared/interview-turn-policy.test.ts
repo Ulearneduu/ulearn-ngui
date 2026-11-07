@@ -308,6 +308,7 @@ test('provider calls keep the API key out of the URL and retry only transient fa
     ok: true,
     text: 'What was your role?',
     usage: { inputTokens: null, outputTokens: null, known: false },
+    calls: [{ responseId: null, usage: { inputTokens: null, outputTokens: null, known: false } }],
   });
   assert.equal(calls.length, 2);
   assert.equal(calls[0]?.url, providerUrl());
@@ -362,6 +363,7 @@ test('a safety block becomes the fixed professional redirect', async () => {
     ok: true,
     text: SAFE_REDIRECT,
     usage: { inputTokens: null, outputTokens: null, known: false },
+    calls: [{ responseId: null, usage: { inputTokens: null, outputTokens: null, known: false } }],
   });
 });
 

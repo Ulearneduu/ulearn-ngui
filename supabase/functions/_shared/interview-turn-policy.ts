@@ -3,7 +3,7 @@
  * Keep the timer math in sync with src/app/interview/interview-timer.ts.
  */
 
-import { readOpenAiUsage, type ProviderUsage } from './interview-usage.ts';
+import { readProviderCall, type ProviderCall, type ProviderUsage } from './interview-usage.ts';
 
 export const MAX_ANSWER_CHARS = 8000;
 export const MAX_HISTORY_TURNS = 40;
@@ -381,8 +381,8 @@ export interface ReplyRequest {
 }
 
 export type ReplyResult =
-  | { ok: true; text: string; usage: ProviderUsage }
-  | { ok: false; code: string; httpStatus: number };
+  | { ok: true; text: string; usage: ProviderUsage; calls: ProviderCall[] }
+  | { ok: false; code: string; httpStatus: number; calls: ProviderCall[] };
 
 export async function requestInterviewReply(options: ReplyRequest): Promise<ReplyResult> {
   const fetchImpl = options.fetchImpl ?? fetch;
@@ -392,11 +392,12 @@ export async function requestInterviewReply(options: ReplyRequest): Promise<Repl
   const budgetMs = options.budgetMs ?? 90_000;
   const started = now();
   const attempts = Math.max(0, options.maxRetries) + 1;
-  let last: ReplyResult = { ok: false, code: 'INTERVIEW_AI_UNAVAILABLE', httpStatus: 503 };
+  const calls: ProviderCall[] = [];
+  let last: ReplyResult = { ok: false, code: 'INTERVIEW_AI_UNAVAILABLE', httpStatus: 503, calls };
 
   for (let attempt = 0; attempt < attempts; attempt++) {
     const remaining = budgetMs - (now() - started);
-    if (remaining < 1000) return { ok: false, code: 'INTERVIEW_AI_TIMEOUT', httpStatus: 504 };
+    if (remaining < 1000) return { ok: false, code: 'INTERVIEW_AI_TIMEOUT', httpStatus: 504, calls };
     try {
       const response = await fetchImpl(providerUrl(), {
         method: 'POST',
@@ -407,17 +408,18 @@ export async function requestInterviewReply(options: ReplyRequest): Promise<Repl
       });
       if (!response.ok) {
         const failure = providerFailure(response.status);
-        last = { ok: false, code: failure.code, httpStatus: failure.httpStatus };
+        last = { ok: false, code: failure.code, httpStatus: failure.httpStatus, calls };
         if (!failure.retry || attempt === attempts - 1) return last;
         await wait(retryDelayMs(attempt, options.retryBaseMs, response.headers.get('retry-after'), random));
         continue;
       }
       const payload = await response.json().catch(() => null);
+      const call = readProviderCall(payload);
+      calls.push(call);
       const text = readOpenAiAnswer(payload);
-      const usage = readOpenAiUsage(payload);
-      if (text === 'blocked') return { ok: true, text: SAFE_REDIRECT, usage };
-      if (typeof text === 'string') return { ok: true, text: limitAssistantText(text), usage };
-      last = { ok: false, code: 'INTERVIEW_AI_UNAVAILABLE', httpStatus: 503 };
+      if (text === 'blocked') return { ok: true, text: SAFE_REDIRECT, usage: call.usage, calls };
+      if (typeof text === 'string') return { ok: true, text: limitAssistantText(text), usage: call.usage, calls };
+      last = { ok: false, code: 'INTERVIEW_AI_UNAVAILABLE', httpStatus: 503, calls };
       if (attempt === attempts - 1) return last;
       await wait(retryDelayMs(attempt, options.retryBaseMs, null, random));
     } catch (error) {
@@ -426,6 +428,7 @@ export async function requestInterviewReply(options: ReplyRequest): Promise<Repl
         ok: false,
         code: timedOut ? 'INTERVIEW_AI_TIMEOUT' : 'INTERVIEW_AI_UNAVAILABLE',
         httpStatus: timedOut ? 504 : 503,
+        calls,
       };
       if (attempt === attempts - 1) return last;
       await wait(retryDelayMs(attempt, options.retryBaseMs, null, random));

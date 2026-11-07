@@ -15,6 +15,8 @@ import {
   selectRate,
   summarizeUsage,
   usageEventKey,
+  usageRecordKey,
+  readProviderCall,
   type ModelRate,
   type UsageSessionFact,
 } from './interview-usage.ts';
@@ -107,7 +109,54 @@ test('a retried provider call returns only the accepted response usage', async (
     ok: true,
     text: 'Tell me about a project.',
     usage: { inputTokens: 40, outputTokens: 9, known: true },
+    calls: [{
+      responseId: null,
+      usage: { inputTokens: 40, outputTokens: 9, known: true },
+    }],
   });
+});
+
+test('an unreadable 200 is kept as unknown usage and a later response is not collapsed', async () => {
+  let calls = 0;
+  const result = await requestInterviewReply({
+    model: 'gpt-6-luna',
+    apiKey: 'test-key',
+    systemPrompt: 'Ask one question.',
+    conversation: [{ role: 'user', content: 'Ready' }],
+    timeoutMs: 1000,
+    maxRetries: 1,
+    retryBaseMs: 1,
+    sleep: async () => undefined,
+    random: () => 0,
+    fetchImpl: async () => {
+      calls += 1;
+      if (calls === 1) {
+        return Response.json({ id: 'chatcmpl-unreadable', usage: { prompt_tokens: 8, completion_tokens: 1 } });
+      }
+      return Response.json({
+        id: 'chatcmpl-accepted',
+        choices: [{ message: { content: 'What did you build?' } }],
+        usage: { prompt_tokens: 11, output_tokens: 4 },
+      });
+    },
+  });
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  assert.equal(result.calls.length, 2);
+  assert.equal(result.calls[0]?.usage.known, true);
+  assert.equal(result.calls[0]?.usage.inputTokens, 8);
+  assert.equal(result.calls[1]?.responseId, 'chatcmpl-accepted');
+  const firstKey = usageRecordKey({
+    kind: 'turn', sessionId: 's', claimId: 'c', index: 0, responseId: result.calls[0]?.responseId ?? null, uniqueFallback: 'a',
+  });
+  const secondKey = usageRecordKey({
+    kind: 'turn', sessionId: 's', claimId: 'c', index: 1, responseId: result.calls[1]?.responseId ?? null, uniqueFallback: 'b',
+  });
+  assert.notEqual(firstKey, secondKey);
+  assert.equal(usageRecordKey({
+    kind: 'turn', sessionId: 's', claimId: 'c', index: 9, responseId: 'chatcmpl-accepted', uniqueFallback: 'other',
+  }), secondKey);
+  assert.equal(readProviderCall('not-json').usage.known, false);
 });
 
 test('token totals accumulate known calls and leave missing metadata unknown', () => {
@@ -275,8 +324,8 @@ test('the analytics migration authorizes staff, prices explicitly, and hides pri
   const turn = fs.readFileSync(path.join(root, 'supabase/functions/interview-turn/index.ts'), 'utf8');
   const evaluate = fs.readFileSync(path.join(root, 'supabase/functions/interview-evaluate/index.ts'), 'utf8');
   assert.match(turn, /recordInterviewAiUsage/);
-  assert.match(turn, /usageEventKey\('turn'/);
-  assert.match(evaluate, /usageEventKey\('evaluation'/);
+  assert.match(turn, /usageRecordKey\(/);
+  assert.match(evaluate, /usageRecordKey\(/);
   assert.equal(turn.includes('prompt_tokens'), false);
   assert.equal(/sk-[A-Za-z0-9]{10,}/.test(sql + turn + evaluate), false);
 });

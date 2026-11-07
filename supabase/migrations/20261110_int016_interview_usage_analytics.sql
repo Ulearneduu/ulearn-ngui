@@ -24,6 +24,11 @@
 -- Keep the aggregate rules aligned with summarizeUsage() in
 -- supabase/functions/_shared/interview-usage.ts.
 
+-- The app already stores college on profiles. Some databases created the
+-- column outside this migration history, so add it before the report reads it.
+ALTER TABLE public.profiles
+  ADD COLUMN IF NOT EXISTS college_name text;
+
 CREATE TABLE IF NOT EXISTS public.interview_ai_usage (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   session_id uuid NOT NULL REFERENCES public.interview_sessions(id) ON DELETE CASCADE,

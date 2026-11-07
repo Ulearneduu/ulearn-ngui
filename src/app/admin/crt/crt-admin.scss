@@ -379,6 +379,12 @@ tr:last-child td {
 @media (max-width: 800px) {
   .crt-frame {
     grid-template-columns: 1fr;
+    min-width: 0;
+  }
+
+  .crt-body,
+  .crt-nav {
+    min-width: 0;
   }
 
   .crt-nav {
