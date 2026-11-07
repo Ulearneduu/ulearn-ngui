@@ -277,13 +277,14 @@ test('model conversation keeps history in order and starts with a user turn', ()
 });
 
 test('provider calls keep the API key out of the URL and retry only transient failures', async () => {
-  const calls: { url: string; body: string; authorization: string }[] = [];
+  const calls: { url: string; body: string; authorization: string; idempotencyKey: string }[] = [];
   const fetchImpl: typeof fetch = async (input, init) => {
     const headers = new Headers(init?.headers);
     calls.push({
       url: String(input),
       body: String(init?.body ?? ''),
       authorization: headers.get('authorization') ?? '',
+      idempotencyKey: headers.get('idempotency-key') ?? '',
     });
     if (calls.length === 1) return new Response('busy', { status: 429, headers: { 'retry-after': '1' } });
     return Response.json({
@@ -302,15 +303,22 @@ test('provider calls keep the API key out of the URL and retry only transient fa
     fetchImpl,
     sleep: async () => undefined,
     random: () => 0,
+    createAttemptId: () => '11111111-1111-4111-8111-111111111111',
   });
 
   assert.deepEqual(result, {
     ok: true,
     text: 'What was your role?',
     usage: { inputTokens: null, outputTokens: null, known: false },
-    calls: [{ responseId: null, usage: { inputTokens: null, outputTokens: null, known: false } }],
+    calls: [{
+      responseId: null,
+      attemptId: '11111111-1111-4111-8111-111111111111',
+      usage: { inputTokens: null, outputTokens: null, known: false },
+    }],
   });
   assert.equal(calls.length, 2);
+  assert.equal(calls[0]?.idempotencyKey, '11111111-1111-4111-8111-111111111111');
+  assert.equal(calls[1]?.idempotencyKey, calls[0]?.idempotencyKey);
   assert.equal(calls[0]?.url, providerUrl());
   assert.equal(calls[0]?.url, 'https://api.openai.com/v1/chat/completions');
   assert.equal(calls[0]?.url.includes('test-key'), false);
@@ -344,6 +352,7 @@ test('provider failures do not invent an answer', async () => {
   });
   assert.equal(result.ok, false);
   assert.equal(calls, 1);
+  assert.equal(result.calls.length, 0);
   assert.equal(readOpenAiAnswer({ choices: [{ message: { refusal: 'no' } }] }), 'blocked');
 });
 
@@ -358,12 +367,17 @@ test('a safety block becomes the fixed professional redirect', async () => {
     maxRetries: 0,
     retryBaseMs: 1,
     fetchImpl,
+    createAttemptId: () => '33333333-3333-4333-8333-333333333333',
   });
   assert.deepEqual(result, {
     ok: true,
     text: SAFE_REDIRECT,
     usage: { inputTokens: null, outputTokens: null, known: false },
-    calls: [{ responseId: null, usage: { inputTokens: null, outputTokens: null, known: false } }],
+    calls: [{
+      responseId: null,
+      attemptId: '33333333-3333-4333-8333-333333333333',
+      usage: { inputTokens: null, outputTokens: null, known: false },
+    }],
   });
 });
 

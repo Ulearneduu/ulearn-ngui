@@ -88,13 +88,16 @@ export interface UsageSummary {
 
 export interface ProviderCall {
   responseId: string | null;
+  /** Server-generated id for this provider attempt. Never taken from the client. */
+  attemptId: string;
   usage: ProviderUsage;
 }
 
 const PROVIDER_RESPONSE_ID = /^[A-Za-z0-9._:-]{6,200}$/;
+const SERVER_ATTEMPT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** One provider HTTP response. A stable provider id dedupes a replay of that response. */
-export function readProviderCall(body: unknown): ProviderCall {
+export function readProviderCall(body: unknown): Omit<ProviderCall, 'attemptId'> {
   const responseId = isRecord(body) && typeof body['id'] === 'string' ? body['id'].trim() : '';
   return {
     responseId: PROVIDER_RESPONSE_ID.test(responseId) ? responseId : null,
@@ -102,23 +105,27 @@ export function readProviderCall(body: unknown): ProviderCall {
   };
 }
 
+export function newProviderAttemptId(): string {
+  return crypto.randomUUID();
+}
+
 /**
- * Prefer the provider response id so a later call for the same turn is a new row,
- * while storing the same response twice is ignored.
- * Responses without an id use a per-response fallback so they are not collapsed together.
+ * Provider response ids dedupe a replay of that response.
+ * A response without an id uses the server attempt id created before that request.
+ * Transport retries of one attempt share the id. A later request gets a new id.
+ * The attempt id is never read from the browser.
  */
 export function usageRecordKey(input: {
-  kind: 'turn' | 'evaluation';
-  sessionId: string;
-  claimId: string;
-  index: number;
   responseId: string | null;
-  uniqueFallback: string;
+  attemptId: string;
 }): string {
   if (input.responseId && PROVIDER_RESPONSE_ID.test(input.responseId)) {
     return `provider:${input.responseId}`;
   }
-  return `${input.kind}:${input.sessionId}:${input.claimId}:${input.index}:${input.uniqueFallback}`;
+  if (!SERVER_ATTEMPT_ID.test(input.attemptId)) {
+    throw new Error('invalid provider attempt id');
+  }
+  return `request:${input.attemptId}`;
 }
 
 export function readOpenAiUsage(body: unknown): ProviderUsage {

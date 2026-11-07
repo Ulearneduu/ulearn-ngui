@@ -5,7 +5,7 @@
  * A competency with applicable:false is omitted and is not given a score.
  */
 
-import { readProviderCall, type ProviderCall, type ProviderUsage } from './interview-usage.ts';
+import { newProviderAttemptId, readProviderCall, type ProviderCall, type ProviderUsage } from './interview-usage.ts';
 import {
   providerFailure,
   providerUrl,
@@ -505,6 +505,8 @@ export interface EvaluationRequest {
   now?: () => number;
   random?: () => number;
   budgetMs?: number;
+  /** Test seam. Production uses a server UUID and never a client value. */
+  createAttemptId?: () => string;
 }
 
 export type EvaluationReply =
@@ -520,6 +522,8 @@ export async function requestEvaluationReply(options: EvaluationRequest): Promis
   const started = now();
   const attempts = Math.max(0, options.maxRetries) + 1;
   const calls: ProviderCall[] = [];
+  const createAttemptId = options.createAttemptId ?? newProviderAttemptId;
+  let attemptId = createAttemptId();
   let last: EvaluationReply = { ok: false, code: 'INTERVIEW_AI_UNAVAILABLE', httpStatus: 503, calls };
 
   for (let attempt = 0; attempt < attempts; attempt++) {
@@ -532,6 +536,7 @@ export async function requestEvaluationReply(options: EvaluationRequest): Promis
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${options.apiKey}`,
+          'Idempotency-Key': attemptId,
         },
         body: JSON.stringify({
           model: options.model,
@@ -552,11 +557,12 @@ export async function requestEvaluationReply(options: EvaluationRequest): Promis
         continue;
       }
       const payload = await response.json().catch(() => null);
-      const call = readProviderCall(payload);
+      const call: ProviderCall = { ...readProviderCall(payload), attemptId };
       calls.push(call);
       const text = readOpenAiAnswer(payload);
       if (typeof text === 'string' && text !== 'blocked') return { ok: true, text, usage: call.usage, calls };
       last = { ok: false, code: 'INTERVIEW_AI_UNAVAILABLE', httpStatus: 503, calls };
+      attemptId = createAttemptId();
       if (attempt === attempts - 1) return last;
       await wait(retryDelayMs(attempt, options.retryBaseMs, null, random));
     } catch (error) {

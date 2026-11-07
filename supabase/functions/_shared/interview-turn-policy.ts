@@ -3,7 +3,7 @@
  * Keep the timer math in sync with src/app/interview/interview-timer.ts.
  */
 
-import { readProviderCall, type ProviderCall, type ProviderUsage } from './interview-usage.ts';
+import { newProviderAttemptId, readProviderCall, type ProviderCall, type ProviderUsage } from './interview-usage.ts';
 
 export const MAX_ANSWER_CHARS = 8000;
 export const MAX_HISTORY_TURNS = 40;
@@ -378,6 +378,8 @@ export interface ReplyRequest {
   now?: () => number;
   random?: () => number;
   budgetMs?: number;
+  /** Test seam. Production uses a server UUID and never a client value. */
+  createAttemptId?: () => string;
 }
 
 export type ReplyResult =
@@ -393,6 +395,8 @@ export async function requestInterviewReply(options: ReplyRequest): Promise<Repl
   const started = now();
   const attempts = Math.max(0, options.maxRetries) + 1;
   const calls: ProviderCall[] = [];
+  const createAttemptId = options.createAttemptId ?? newProviderAttemptId;
+  let attemptId = createAttemptId();
   let last: ReplyResult = { ok: false, code: 'INTERVIEW_AI_UNAVAILABLE', httpStatus: 503, calls };
 
   for (let attempt = 0; attempt < attempts; attempt++) {
@@ -402,7 +406,7 @@ export async function requestInterviewReply(options: ReplyRequest): Promise<Repl
       const response = await fetchImpl(providerUrl(), {
         method: 'POST',
         redirect: 'error',
-        headers: providerHeaders(options.apiKey),
+        headers: providerHeaders(options.apiKey, attemptId),
         body: JSON.stringify(providerBody(options)),
         signal: AbortSignal.timeout(Math.min(options.timeoutMs, remaining)),
       });
@@ -414,12 +418,13 @@ export async function requestInterviewReply(options: ReplyRequest): Promise<Repl
         continue;
       }
       const payload = await response.json().catch(() => null);
-      const call = readProviderCall(payload);
+      const call: ProviderCall = { ...readProviderCall(payload), attemptId };
       calls.push(call);
       const text = readOpenAiAnswer(payload);
       if (text === 'blocked') return { ok: true, text: SAFE_REDIRECT, usage: call.usage, calls };
       if (typeof text === 'string') return { ok: true, text: limitAssistantText(text), usage: call.usage, calls };
       last = { ok: false, code: 'INTERVIEW_AI_UNAVAILABLE', httpStatus: 503, calls };
+      attemptId = createAttemptId();
       if (attempt === attempts - 1) return last;
       await wait(retryDelayMs(attempt, options.retryBaseMs, null, random));
     } catch (error) {
@@ -480,8 +485,12 @@ export function providerUrl(): string {
   return 'https://api.openai.com/v1/chat/completions';
 }
 
-function providerHeaders(apiKey: string): Record<string, string> {
-  return { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` };
+function providerHeaders(apiKey: string, attemptId: string): Record<string, string> {
+  return {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${apiKey}`,
+    'Idempotency-Key': attemptId,
+  };
 }
 
 function providerBody(options: ReplyRequest): Record<string, unknown> {

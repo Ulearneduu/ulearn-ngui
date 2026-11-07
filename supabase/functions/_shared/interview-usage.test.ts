@@ -95,6 +95,7 @@ test('a retried provider call returns only the accepted response usage', async (
     retryBaseMs: 1,
     sleep: async () => undefined,
     random: () => 0,
+    createAttemptId: () => '11111111-1111-4111-8111-111111111111',
     fetchImpl: async () => {
       calls += 1;
       if (calls === 1) return new Response('busy', { status: 429, headers: { 'retry-after': '0' } });
@@ -111,13 +112,20 @@ test('a retried provider call returns only the accepted response usage', async (
     usage: { inputTokens: 40, outputTokens: 9, known: true },
     calls: [{
       responseId: null,
+      attemptId: '11111111-1111-4111-8111-111111111111',
       usage: { inputTokens: 40, outputTokens: 9, known: true },
     }],
   });
+  const replay = usageRecordKey({
+    responseId: null,
+    attemptId: '11111111-1111-4111-8111-111111111111',
+  });
+  assert.equal(usageRecordKey({ responseId: null, attemptId: result.calls[0]?.attemptId ?? '' }), replay);
 });
 
 test('an unreadable 200 is kept as unknown usage and a later response is not collapsed', async () => {
   let calls = 0;
+  const attemptIds = ['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'];
   const result = await requestInterviewReply({
     model: 'gpt-6-luna',
     apiKey: 'test-key',
@@ -128,6 +136,7 @@ test('an unreadable 200 is kept as unknown usage and a later response is not col
     retryBaseMs: 1,
     sleep: async () => undefined,
     random: () => 0,
+    createAttemptId: () => attemptIds[calls] ?? 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
     fetchImpl: async () => {
       calls += 1;
       if (calls === 1) {
@@ -147,16 +156,87 @@ test('an unreadable 200 is kept as unknown usage and a later response is not col
   assert.equal(result.calls[0]?.usage.inputTokens, 8);
   assert.equal(result.calls[1]?.responseId, 'chatcmpl-accepted');
   const firstKey = usageRecordKey({
-    kind: 'turn', sessionId: 's', claimId: 'c', index: 0, responseId: result.calls[0]?.responseId ?? null, uniqueFallback: 'a',
+    responseId: result.calls[0]?.responseId ?? null,
+    attemptId: result.calls[0]?.attemptId ?? '',
   });
   const secondKey = usageRecordKey({
-    kind: 'turn', sessionId: 's', claimId: 'c', index: 1, responseId: result.calls[1]?.responseId ?? null, uniqueFallback: 'b',
+    responseId: result.calls[1]?.responseId ?? null,
+    attemptId: result.calls[1]?.attemptId ?? '',
   });
-  assert.notEqual(firstKey, secondKey);
+  assert.equal(firstKey, 'provider:chatcmpl-unreadable');
+  assert.equal(secondKey, 'provider:chatcmpl-accepted');
   assert.equal(usageRecordKey({
-    kind: 'turn', sessionId: 's', claimId: 'c', index: 9, responseId: 'chatcmpl-accepted', uniqueFallback: 'other',
+    responseId: 'chatcmpl-accepted',
+    attemptId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
   }), secondKey);
   assert.equal(readProviderCall('not-json').usage.known, false);
+});
+
+test('missing provider ids stay distinct per attempt and a replay reuses the attempt', () => {
+  const first = '11111111-1111-4111-8111-111111111111';
+  const second = '22222222-2222-4222-8222-222222222222';
+  const missing = usageRecordKey({ responseId: null, attemptId: first });
+  assert.equal(usageRecordKey({ responseId: null, attemptId: first }), missing);
+  assert.notEqual(usageRecordKey({ responseId: null, attemptId: second }), missing);
+  assert.equal(usageRecordKey({ responseId: 'chatcmpl-known', attemptId: first }), 'provider:chatcmpl-known');
+  assert.throws(() => usageRecordKey({ responseId: null, attemptId: 'client-supplied' }));
+  const unknown = readProviderCall({ id: 'chatcmpl-unknown-usage' });
+  assert.equal(unknown.usage.known, false);
+  assert.equal(unknown.usage.inputTokens, null);
+  assert.equal(unknown.usage.outputTokens, null);
+});
+
+test('a failed request stores nothing and two id-less requests stay separate', async () => {
+  const ids = [
+    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+  ];
+  let issued = 0;
+  const failed = await requestInterviewReply({
+    model: 'gpt-6-luna',
+    apiKey: 'test-key',
+    systemPrompt: 'Ask one question.',
+    conversation: [{ role: 'user', content: 'Ready' }],
+    timeoutMs: 1000,
+    maxRetries: 1,
+    retryBaseMs: 1,
+    sleep: async () => undefined,
+    fetchImpl: async () => new Response('no', { status: 400 }),
+  });
+  assert.equal(failed.ok, false);
+  assert.equal(failed.calls.length, 0);
+
+  let fetches = 0;
+  const distinct = await requestInterviewReply({
+    model: 'gpt-6-luna',
+    apiKey: 'test-key',
+    systemPrompt: 'Ask one question.',
+    conversation: [{ role: 'user', content: 'Ready' }],
+    timeoutMs: 1000,
+    maxRetries: 1,
+    retryBaseMs: 1,
+    sleep: async () => undefined,
+    createAttemptId: () => {
+      const id = ids[issued];
+      issued += 1;
+      return id ?? 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+    },
+    fetchImpl: async () => {
+      fetches += 1;
+      if (fetches === 1) return Response.json({ choices: [] });
+      return Response.json({ choices: [{ message: { content: 'Next question?' } }] });
+    },
+  });
+  assert.equal(distinct.ok, true);
+  if (!distinct.ok) return;
+  assert.equal(distinct.calls.length, 2);
+  assert.equal(distinct.calls[0]?.usage.known, false);
+  assert.equal(distinct.calls[1]?.usage.known, false);
+  assert.notEqual(distinct.calls[0]?.attemptId, distinct.calls[1]?.attemptId);
+  assert.notEqual(
+    usageRecordKey({ responseId: null, attemptId: distinct.calls[0]?.attemptId ?? '' }),
+    usageRecordKey({ responseId: null, attemptId: distinct.calls[1]?.attemptId ?? '' }),
+  );
 });
 
 test('token totals accumulate known calls and leave missing metadata unknown', () => {

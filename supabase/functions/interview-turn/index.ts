@@ -200,12 +200,8 @@ Deno.serve(async (req) => {
           userId,
           callKind: 'turn',
           idempotencyKey: usageRecordKey({
-            kind: 'turn',
-            sessionId: session.id,
-            claimId: clientTurnId,
-            index,
             responseId: call.responseId,
-            uniqueFallback: crypto.randomUUID(),
+            attemptId: call.attemptId,
           }),
           provider: 'openai',
           model: aiConfig.model,

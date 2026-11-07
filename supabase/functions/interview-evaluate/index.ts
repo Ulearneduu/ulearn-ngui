@@ -185,12 +185,8 @@ Deno.serve(async (req) => {
         userId,
         callKind: 'evaluation',
         idempotencyKey: usageRecordKey({
-          kind: 'evaluation',
-          sessionId: session.id,
-          claimId: claim.claimedAt,
-          index,
           responseId: call.responseId,
-          uniqueFallback: crypto.randomUUID(),
+          attemptId: call.attemptId,
         }),
         provider: 'openai',
         model: aiConfig.model,

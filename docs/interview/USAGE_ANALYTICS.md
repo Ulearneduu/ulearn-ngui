@@ -14,11 +14,11 @@ Interview sessions, turns, and evaluations stay on the INT-005 / INT-008 tables.
 
 `interview-turn` records each accepted reply, including a resume steering retry that produced a new model response. `interview-evaluate` records the accepted evaluation response, including a response that is later rejected as invalid JSON, because those tokens were consumed. A provider failure is not recorded.
 
-Each provider HTTP 200 is a usage row. The idempotency key is the provider response id (`provider:{id}` from the JSON `id` field, such as `chatcmpl-...`) when that id is present. Storing the same response again is ignored. A later provider call has a new id and is counted. A 429 or 5xx response is not stored.
+Each provider HTTP 200 is a usage row. The idempotency key is the provider response id (`provider:{id}` from the JSON `id` field, such as `chatcmpl-...`) when that id is present. Storing the same response again is ignored. A later provider call has a new id and is counted. A 429, 5xx, timeout, or network failure is not stored.
 
-A 200 body that parses but does not contain a usable answer is still stored. If it includes usage metadata, those tokens are kept. If it does not, the row is unknown usage rather than zero. A body that is not JSON has no metadata and is not given invented token counts.
+Before each provider request the function creates a server UUID. That id is sent as the `Idempotency-Key` header and is kept for transport retries of the same attempt. It is not read from the browser. When the provider omits a response id, the usage key is `request:{server UUID}`. Re-recording that attempt is ignored. A later request, including a retry after an unusable HTTP 200, gets a new UUID and stays a separate row.
 
-When the provider omits a response id, the key is `turn` or `evaluation`, the session, the client turn or evaluation claim, the call index, and a unique id for that response. Those rows are not collapsed into an earlier call for the same turn. A replay that does not call the provider does not insert a row.
+A 200 body that parses but does not contain a usable answer is still stored. If it includes usage metadata, those tokens are kept. If it does not, the row is unknown usage rather than zero. A body that is not JSON has no metadata and is not given invented token counts. A replay that does not call the provider does not insert a row.
 
 Recording is best-effort. A usage insert failure is logged and does not fail the interview.
 
