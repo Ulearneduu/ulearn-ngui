@@ -21,6 +21,11 @@
 -- migration does not invent one. Students do not have dashboard.view.
 -- The report never returns transcripts, resume text, or secrets.
 --
+-- Authenticated and anonymous users cannot insert, update, or directly delete
+-- usage rows. DELETE is granted only so a session delete can cascade. The
+-- guard and the delete policy allow that cascade after the parent session row
+-- is already gone, and reject a delete while the session still exists.
+--
 -- Keep the aggregate rules aligned with summarizeUsage() in
 -- supabase/functions/_shared/interview-usage.ts.
 
@@ -86,6 +91,16 @@ SET search_path = public
 AS $$
 BEGIN
   IF TG_OP = 'DELETE' THEN
+    -- The parent delete is already visible when ON DELETE CASCADE runs.
+    -- A direct delete still sees the session and is rejected.
+    IF current_user IN ('authenticated', 'anon')
+       AND EXISTS (
+         SELECT 1
+         FROM public.interview_sessions AS s
+         WHERE s.id = OLD.session_id
+       ) THEN
+      RAISE EXCEPTION 'interview usage cannot be deleted directly';
+    END IF;
     RETURN OLD;
   END IF;
   IF TG_OP = 'UPDATE' THEN
@@ -111,20 +126,20 @@ REVOKE ALL ON TABLE public.interview_ai_usage FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON TABLE public.interview_model_rates FROM PUBLIC, anon, authenticated;
 GRANT ALL ON TABLE public.interview_ai_usage TO service_role;
 GRANT ALL ON TABLE public.interview_model_rates TO service_role;
--- Session owners can cascade-delete usage when they delete their own session.
+-- Privilege only. A direct delete is denied by the policy and the guard.
 GRANT DELETE ON TABLE public.interview_ai_usage TO authenticated;
 
 DROP POLICY IF EXISTS "Owners delete usage with their sessions" ON public.interview_ai_usage;
-CREATE POLICY "Owners delete usage with their sessions"
+DROP POLICY IF EXISTS "Cascade removes usage after the session is deleted" ON public.interview_ai_usage;
+CREATE POLICY "Cascade removes usage after the session is deleted"
 ON public.interview_ai_usage
 FOR DELETE
 TO authenticated
 USING (
-  EXISTS (
+  NOT EXISTS (
     SELECT 1
     FROM public.interview_sessions AS s
     WHERE s.id = interview_ai_usage.session_id
-      AND (s.user_id = auth.uid() OR public.is_admin())
   )
 );
 

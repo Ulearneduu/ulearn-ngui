@@ -392,6 +392,13 @@ test('the analytics migration authorizes staff, prices explicitly, and hides pri
   assert.match(sql, /unauthenticated/);
   assert.match(sql, /forbidden/);
   assert.match(sql, /REVOKE ALL ON TABLE public\.interview_ai_usage FROM PUBLIC, anon, authenticated/);
+  assert.match(sql, /interview usage cannot be deleted directly/);
+  assert.match(sql, /Cascade removes usage after the session is deleted/);
+  assert.equal(sql.includes('CREATE POLICY "Owners delete usage with their sessions"'), false);
+  assert.equal(sql.includes('GRANT INSERT ON TABLE public.interview_ai_usage TO authenticated'), false);
+  assert.equal(sql.includes('GRANT UPDATE ON TABLE public.interview_ai_usage TO authenticated'), false);
+  assert.equal(sql.includes('GRANT SELECT ON TABLE public.interview_ai_usage TO authenticated'), false);
+  assert.equal(sql.includes('GRANT ALL ON TABLE public.interview_ai_usage TO authenticated'), false);
   assert.match(sql, /GRANT EXECUTE ON FUNCTION public\.interview_usage_report/);
   assert.match(sql, /__unassigned__/);
   assert.match(sql, /status = 'completed' AND overall_score IS NOT NULL/);
