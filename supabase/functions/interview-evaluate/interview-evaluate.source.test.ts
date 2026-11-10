@@ -109,7 +109,7 @@ test('practice tips are generated after scoring and only the evaluator can store
   assert.match(source, /p_tips: input\.tips/);
   assert.match(source, /evaluation_tips/);
   assert.match(source, /requireTips: outcome === 'completed'/);
-  const sql = read('supabase/migrations/20261107_interview_practice_tips.sql');
+  const sql = read('supabase/migrations/20261109160000_interview_practice_tips.sql');
   assert.match(sql, /ADD COLUMN IF NOT EXISTS evaluation_tips text\[\]/);
   assert.match(sql, /interview_tips_valid/);
   assert.match(sql, /REVOKE UPDATE \(evaluation_tips\) ON TABLE public\.interview_sessions FROM PUBLIC, anon, authenticated/);
