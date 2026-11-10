@@ -28,11 +28,13 @@ assert.match(migration, /interview evaluation is written by the evaluator/);
 console.log('pass: migration defines redo_of_session_id with ownership and immutability guards');
 
 const catalog = read('src/app/interview/interview-catalog.service.ts');
+const service = read('src/app/interview/interview.service.ts');
 assert.match(catalog, /async startRedoSession\(/);
-assert.match(catalog, /redo_of_session_id: parent\.id/);
+assert.match(catalog, /redoOfSessionId: parent\.id/);
+assert.match(service, /body\['redo_of_session_id'\] = options\.redoOfSessionId/);
 assert.match(catalog, /template_version_id/);
-assert.match(catalog, /prompt_version: parent\.prompt_version/);
-assert.match(catalog, /loadQuota\(/);
+assert.match(catalog, /promptVersion: parent\.prompt_version/);
+assert.match(catalog, /startInterview\(/);
 assert.equal(catalog.includes('latestPublishedTemplateVersion(parent'), false);
 assert.ok(catalog.indexOf('async startRedoSession') > 0);
 assert.ok(

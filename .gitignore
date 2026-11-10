@@ -48,6 +48,7 @@ Thumbs.db
 .env.*
 !.env.example
 .cursor/mcp.json
+src/environments/environment.development.ts
 
 # Supabase local
 supabase/.temp/
